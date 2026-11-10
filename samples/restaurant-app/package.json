@@ -1,0 +1,5 @@
+{
+  "name": "restaurant-app",
+  "private": true,
+  "description": "Hand-made test project for the Architecture Mapper. Contains deliberate architecture smells: pages import the database directly, a cart/pricing import cycle, and a god utils file."
+}

@@ -1,0 +1,164 @@
+@@@09908035cd982a427226f908898465de09b94f24|1793109600|Bump dependencies
+
+package.json
+@@@f3fac1d6ffa87ea7889e4d80ff734470b1c3c69e|1791900000|Order page shows dish count
+
+src/pages/order.tsx
+@@@c3ef0c2370396b1b9c176fe79ba7ec94e1c68cf5|1790690400|fix cart summary showing stale total
+
+src/state/cartStore.ts
+src/services/pricing.ts
+@@@1c432e1f264097bf35dcdf6b08e9c85b0f8f4046|1789480800|Cart shows line totals
+
+src/components/Cart.tsx
+src/lib/format.ts
+@@@dce1dd6ffb4b0dc373a469621dda41e794dffb93|1788271200|fix(pricing): subtotal ignores item quantity
+
+src/services/pricing.ts
+@@@b1a1500d45c34392b74e7b25d0c8fe0823b996eb|1787061600|Add page tests
+
+src/pages/checkout.test.tsx
+src/pages/menu.test.tsx
+src/lib/format.test.ts
+src/lib/utils.test.ts
+@@@ddd7a8fad03d89b86c0af56fc78f540ab7f20125|1785852000|Format all files with prettier
+
+src/components/Cart.tsx
+src/components/MenuItemCard.tsx
+src/components/MenuList.tsx
+src/data/db.ts
+src/data/schema.ts
+src/lib/config.ts
+src/lib/format.ts
+src/lib/logger.ts
+src/lib/utils.ts
+src/pages/checkout.tsx
+src/pages/menu.tsx
+src/pages/order.tsx
+src/services/menuService.ts
+src/services/paymentService.ts
+src/services/pricing.ts
+src/state/cartStore.ts
+config/generated-0.json
+config/generated-1.json
+config/generated-2.json
+config/generated-3.json
+config/generated-4.json
+config/generated-5.json
+config/generated-6.json
+config/generated-7.json
+config/generated-8.json
+config/generated-9.json
+config/generated-10.json
+config/generated-11.json
+config/generated-12.json
+config/generated-13.json
+config/generated-14.json
+config/generated-15.json
+config/generated-16.json
+config/generated-17.json
+config/generated-18.json
+config/generated-19.json
+config/generated-20.json
+config/generated-21.json
+config/generated-22.json
+config/generated-23.json
+config/generated-24.json
+config/generated-25.json
+config/generated-26.json
+config/generated-27.json
+config/generated-28.json
+config/generated-29.json
+@@@f15f23fb49c597fdc03aebed171ea462503e2e43|1784037600|Fix crash when paying for a missing order
+
+src/services/paymentService.ts
+@@@9f0ee13629d454e7bfca44e4189fbc7847d8c8ac|1782914400|Log payment attempts
+
+src/services/paymentService.ts
+src/lib/logger.ts
+@@@dfca884884f7f2b658ef29ac13cb92fc58735ab7|1781618400|Add payment tests
+
+src/services/paymentService.test.ts
+src/data/db.test.ts
+@@@0f4dc0593a12aabac5449ee527e2182c4726465e|1780408800|fix: tax applied twice when cart has discounts
+
+src/services/pricing.ts
+src/state/cartStore.ts
+@@@01d97339618672cc770a1a12c721bf13c6644c1f|1779804000|Add menu service
+
+src/services/menuService.ts
+src/data/db.ts
+@@@5d9af5bb0b5b5740e0dc38309e12f1c6d70082f2|1779199200|Add chef's pick highlight
+
+src/components/MenuList.tsx
+@@@73e392c82a41670da3004a7327cfb2946ef202c3|1777989600|Refactor menu page
+
+src/pages/menu.tsx
+src/components/MenuList.tsx
+@@@413b885091b62d124a1c180c3629b7d9c9746a77|1776780000|fix currency symbol for non-USD configs
+
+src/lib/format.ts
+src/lib/utils.ts
+@@@04bf48289a5cbcdea8e34ab367170fd96fc571cd|1775484000|Show cart summary in header
+
+src/state/cartStore.ts
+src/components/Cart.tsx
+@@@1f6a48736f6fb597ad82c276daa37e2f9d537eee|1774015200|Add order page
+
+src/pages/order.tsx
+src/data/db.ts
+@@@fe574b61977f7131ce6cb3e49129b99cd27db09e|1773064800|fix(pricing): rounding error on totals
+
+src/services/pricing.ts
+src/lib/utils.ts
+@@@e79af3e656c0cc89594d61234c66708ee0384ebb|1772460000|Add payment service
+
+src/services/paymentService.ts
+src/data/db.ts
+@@@3e1af48f5f9561b8a09d7d5dd276afe87eb5b8fd|1771250400|Add tests for pricing and cart
+
+src/services/pricing.test.ts
+src/state/cartStore.test.ts
+@@@c2070e8af9b3b1942cd87074b4027694a43965af|1770040800|fix: cart quantity not incrementing for repeated items
+
+src/state/cartStore.ts
+@@@da3b23f5584239487390f38f71f885947ef5a4aa|1769090400|Add checkout page
+
+src/pages/checkout.tsx
+src/services/pricing.ts
+@@@59c8330c04d376207e625d71114ebb229d657947|1768312800|Add cart component
+
+src/components/Cart.tsx
+src/state/cartStore.ts
+@@@e755b50012529f9664f77db1f3ee0b08e2098b3e|1767880800|Add pricing service with tax
+
+src/services/pricing.ts
+src/lib/config.ts
+@@@6164550ad2859d1ffdb867a29481a41a473acfb0|1765807200|Fix menu item lookup returning the wrong dish
+
+src/data/db.ts
+src/lib/utils.ts
+@@@4a8da3a8d48b19b20e3ef38be5fac691e41e2af6|1764856800|Add price formatting
+
+src/lib/format.ts
+src/components/MenuItemCard.tsx
+@@@6c1dd1f77b1608a9f013ffee60a3f43bd994dd49|1764079200|Add cart store
+
+src/state/cartStore.ts
+src/lib/utils.ts
+@@@56ea93ef1782711928f01ea56ecce2cc69966583|1763474400|Add logger
+
+src/lib/logger.ts
+src/data/db.ts
+@@@4f92ab8ba2cb10a09f8578f3b426ceaacac81f46|1762783200|Add menu list and item card
+
+src/components/MenuList.tsx
+src/components/MenuItemCard.tsx
+src/pages/menu.tsx
+@@@e0165f44195bcd69ccf1685d8a28d96e542a1af0|1762178400|Initial restaurant app skeleton
+
+src/data/db.ts
+src/data/schema.ts
+src/lib/config.ts
+src/lib/utils.ts
+src/pages/menu.tsx

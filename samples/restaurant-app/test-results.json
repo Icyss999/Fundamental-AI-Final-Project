@@ -1,0 +1,97 @@
+{
+  "numTotalTestSuites": 8,
+  "numFailedTestSuites": 3,
+  "numPassedTestSuites": 5,
+  "success": false,
+  "testResults": [
+    {
+      "name": "/workspace/restaurant-app/src/services/pricing.test.ts",
+      "status": "failed",
+      "assertionResults": [
+        {
+          "title": "adds tax once",
+          "status": "failed",
+          "failureMessages": [
+            "AssertionError: expected 10.26 to be 9.5"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "/workspace/restaurant-app/src/pages/checkout.test.tsx",
+      "status": "failed",
+      "assertionResults": [
+        {
+          "title": "renders the total",
+          "status": "failed",
+          "failureMessages": [
+            "AssertionError: expected 10.26 to be 9.5"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "/workspace/restaurant-app/src/services/paymentService.test.ts",
+      "status": "failed",
+      "assertionResults": [
+        {
+          "title": "marks an order as paid",
+          "status": "failed",
+          "failureMessages": [
+            "AssertionError: expected 10.26 to be 9.5"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "/workspace/restaurant-app/src/state/cartStore.test.ts",
+      "status": "passed",
+      "assertionResults": [
+        {
+          "title": "counts quantities",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "/workspace/restaurant-app/src/lib/format.test.ts",
+      "status": "passed",
+      "assertionResults": [
+        {
+          "title": "formats dollars",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "/workspace/restaurant-app/src/lib/utils.test.ts",
+      "status": "passed",
+      "assertionResults": [
+        {
+          "title": "rounds, sums and finds by id",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "/workspace/restaurant-app/src/data/db.test.ts",
+      "status": "passed",
+      "assertionResults": [
+        {
+          "title": "serves the menu",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "name": "/workspace/restaurant-app/src/pages/menu.test.tsx",
+      "status": "passed",
+      "assertionResults": [
+        {
+          "title": "renders the menu",
+          "status": "passed"
+        }
+      ]
+    }
+  ]
+}
