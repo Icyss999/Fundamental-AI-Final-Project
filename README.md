@@ -1,4 +1,4 @@
-# Codebase Architecture Mapper
+# (Kosmos) Codebase Architecture Mapper
 
 Interactive tool that turns a JS/TS codebase into a diagram, highlights where bugs are most likely hiding, and plans
 safe refactorings toward an architecture you draw. Fundamentals of AI course project — the search, Bayesian and
