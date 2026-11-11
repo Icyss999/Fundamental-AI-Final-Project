@@ -2,11 +2,14 @@
 
 import { useRef, useState, type ReactNode } from "react";
 import { Icon, timeAgo } from "@/components/app/ui";
+import { CodeBlock } from "@/components/assistant/Markdown";
 import type { SidebarContext } from "@/components/mapper/DiagramView";
-import { FileRow, Heading, Note, PanelButton } from "@/components/mapper/panel";
+import { AskButton, FileRow, Heading, Note, PanelButton } from "@/components/mapper/panel";
 import type { HistoryData } from "@/lib/analyze";
 import type { Outcome } from "@/lib/diagnose/bayes";
+import { reviewLogBayesFactor } from "@/lib/diagnose/bayes";
 import { DEFAULT_DIAGNOSIS_PARAMS, type DiagnosisParams, type FileRisk } from "@/lib/diagnose/diagnose";
+import { SEVERITY_WEIGHT, type Finding } from "@/lib/diagnose/review";
 import type { ProjectSource } from "@/lib/repo/overview";
 import { baseName, formatFactor, formatProb, heatBackground, hops, relPath } from "./format";
 import type { Layers } from "./useLayers";
@@ -54,7 +57,7 @@ function Row({ label, sub, value, children }: { label: ReactNode; sub?: ReactNod
 }
 
 /** "Why is this file suspected?" — the prior, each test's Bayes factor, and the posterior they give. */
-function WhyCard({ risk, total, prefix, source, now, hasOutcomes, failing }: { risk: FileRisk; total: number; prefix: string; source: ProjectSource; now: number; hasOutcomes: boolean; failing: number }) {
+function WhyCard({ risk, total, prefix, source, now, hasOutcomes, failing, onAsk }: { risk: FileRisk; total: number; prefix: string; source: ProjectSource; now: number; hasOutcomes: boolean; failing: number; onAsk?: () => void }) {
   const [allFactors, setAllFactors] = useState(false);
   const h = risk.history;
   const factors = allFactors ? risk.factors : risk.factors.slice(0, FACTOR_PREVIEW);
@@ -123,6 +126,18 @@ function WhyCard({ risk, total, prefix, source, now, hasOutcomes, failing }: { r
             value={formatFactor(f.logBF)}
           />
         ))}
+        {risk.review && (
+          <Row
+            label={
+              <span className="flex items-center gap-1.5">
+                <Icon.Sparkle className="h-3.5 w-3.5 shrink-0 text-[var(--ai)]" />
+                AI code review
+              </span>
+            }
+            sub={risk.review.flagged ? risk.review.titles.join(" · ") : "read it and found nothing wrong"}
+            value={formatFactor(risk.review.logBF)}
+          />
+        )}
         {risk.factors.length > FACTOR_PREVIEW && (
           <li>
             <button onClick={() => setAllFactors((v) => !v)} className="px-1 text-[11.5px] text-[var(--accent-strong)] hover:underline">
@@ -147,7 +162,40 @@ function WhyCard({ risk, total, prefix, source, now, hasOutcomes, failing }: { r
           Ochiai baseline: {risk.ochiai.toFixed(2)}, rank #{risk.ochiaiRank}
         </p>
       )}
+      {onAsk && (
+        <AskButton className="mt-2" onClick={onAsk}>
+          Ask AI to inspect this file
+        </AskButton>
+      )}
     </section>
+  );
+}
+
+const SEVERITY_TONE = { high: "bg-[var(--danger)]", medium: "bg-[var(--warn)]", low: "bg-[var(--muted)]" } as const;
+
+/** One finding of the AI's code review: where, what, and the suggested fix. */
+function FindingRow({ finding: f, prefix, onFocus }: { finding: Finding; prefix: string; onFocus: (file: string) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <li className="rounded-lg border border-[var(--border)]">
+      <button onClick={() => setOpen((v) => !v)} className="flex w-full items-start gap-2 px-2.5 py-2 text-left">
+        <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${SEVERITY_TONE[f.severity]}`} title={`${f.severity} severity`} />
+        <span className="min-w-0 flex-1">
+          <span className="block text-[12.5px] font-medium leading-snug">{f.title}</span>
+          <span className="block truncate font-mono text-[11px] text-[var(--muted)]">
+            {relPath(f.file, prefix)}
+            {f.line ? `:${f.line}` : ""}
+          </span>
+        </span>
+      </button>
+      {open && (
+        <div className="space-y-2 border-t border-[var(--border)] px-2.5 py-2">
+          <p className="whitespace-pre-line text-[12px] leading-relaxed">{f.detail}</p>
+          {f.fix && <CodeBlock lang="diff" text={f.fix} />}
+          <PanelButton onClick={() => onFocus(f.file)}>Show {baseName(f.file)}</PanelButton>
+        </div>
+      )}
+    </li>
   );
 }
 
@@ -217,6 +265,7 @@ export function DiagnosePanel({
   labels,
   modules,
   analysedAt,
+  onAsk,
 }: {
   layers: Layers;
   history: HistoryData | null;
@@ -227,6 +276,7 @@ export function DiagnosePanel({
   labels: Record<string, string>;
   modules: Map<string, string[]>;
   analysedAt: number;
+  onAsk?: (prompt: string) => void;
 }) {
   const { diagnosis: d, outcomes, setOutcome, setOutcomes, params, setParams, loadReport, reportNote } = layers;
   const [showAll, setShowAll] = useState(false);
@@ -238,7 +288,19 @@ export function DiagnosePanel({
 
   let selected: ReactNode = null;
   if (selectedRisk) {
-    selected = <WhyCard risk={selectedRisk} total={d.files.length} prefix={prefix} source={source} now={analysedAt} hasOutcomes={d.failing + d.passing > 0} failing={d.failing} />;
+    const id = selectedRisk.id;
+    selected = (
+      <WhyCard
+        risk={selectedRisk}
+        total={d.files.length}
+        prefix={prefix}
+        source={source}
+        now={analysedAt}
+        hasOutcomes={d.failing + d.passing > 0}
+        failing={d.failing}
+        onAsk={onAsk && (() => onAsk(`Inspect \`${id}\`: read it (and the failing tests that reach it, if any) and tell me where a bug most likely is and how to fix it.`))}
+      />
+    );
   } else if (selection?.type === "file") {
     selected = <Note>{relPath(selection.id, prefix)} is not a source file, so it is not ranked.</Note>;
   } else if (selection?.type === "module") {
@@ -305,6 +367,36 @@ export function DiagnosePanel({
             {showAll ? "Show top 10" : `Show all ${d.files.length}`}
           </button>
         )}
+        {layers.review && (
+          <>
+            <Heading
+              action={
+                <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-[var(--muted)]" title="Count the review as Bayesian evidence in the ranking">
+                  <input type="checkbox" checked={layers.useReview} onChange={(e) => layers.setUseReview(e.target.checked)} className="accent-[var(--ai)]" />
+                  Use as evidence
+                </label>
+              }
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <Icon.Sparkle className="h-3 w-3 text-[var(--ai)]" />
+                AI code review
+              </span>
+            </Heading>
+            <Note>
+              {layers.review.findings.length === 0 ? "No problems found" : `${layers.review.findings.length} ${layers.review.findings.length === 1 ? "finding" : "findings"}`} in{" "}
+              {layers.review.reviewed.length} {layers.review.reviewed.length === 1 ? "file" : "files"} read. A flagged file&apos;s odds go up to{" "}
+              {formatFactor(reviewLogBayesFactor(SEVERITY_WEIGHT.high, params))}; a file read and found clean goes {formatFactor(reviewLogBayesFactor(null, params))}.
+            </Note>
+            <ul className="mt-1.5 space-y-1.5">
+              {[...layers.review.findings]
+                .sort((a, b) => SEVERITY_WEIGHT[b.severity] - SEVERITY_WEIGHT[a.severity])
+                .map((f, i) => (
+                  <FindingRow key={`${f.file}:${f.line ?? ""}:${i}`} finding={f} prefix={prefix} onFocus={ctx.focusFile} />
+                ))}
+            </ul>
+          </>
+        )}
+
         <div className="mt-3 flex items-center gap-2 text-[11px] text-[var(--muted)]">
           <span>less</span>
           <span

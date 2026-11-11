@@ -25,6 +25,9 @@
   --heat: #eb6834;
   --added: #16a34a;
   --added-soft: #e3f6e8;
+  /* The AI assistant: its panel accents and the files it highlights in the diagram. */
+  --ai: #7c3aed;
+  --ai-soft: #f1ebff;
 
   /* Module family colours (diagram stripes, overview dots). */
   --c0: #3b82f6;
@@ -62,6 +65,8 @@
     --heat: #f07a45;
     --added: #4ade80;
     --added-soft: rgb(34 197 94 / 0.16);
+    --ai: #a78bfa;
+    --ai-soft: rgb(139 92 246 / 0.18);
 
     --c0: #60a5fa;
     --c1: #34d399;

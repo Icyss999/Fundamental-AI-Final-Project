@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { languageName } from "@/lib/graph/polyglot/languages";
 import type { DepGraph } from "@/lib/graph/types";
 import type { RepoMeta } from "./github";
 
@@ -190,14 +191,24 @@ const RUNTIME_CATEGORIES: ReadonlySet<TechCategory> = new Set(["Framework", "UI"
  * @param devDeps devDependencies (only count for testing and tooling — test suites often pull in
  *                frameworks the project itself doesn't use)
  */
-export function detectTechStack(runtimeDeps: Iterable<string>, devDeps: Iterable<string>, usesTypeScript: boolean): TechItem[] {
+export function detectTechStack(
+  runtimeDeps: Iterable<string>,
+  devDeps: Iterable<string>,
+  usesTypeScript: boolean,
+  /** Other languages (main first) and what other ecosystems' build files reveal. */
+  extra: { languages?: string[]; ecosystem?: TechItem[]; hasJs?: boolean } = {},
+): TechItem[] {
   const runtime = [...runtimeDeps];
   const all = [...runtime, ...devDeps];
   const found = new Map<string, TechItem>();
-  found.set(usesTypeScript ? "TypeScript" : "JavaScript", {
-    name: usesTypeScript ? "TypeScript" : "JavaScript",
-    category: "Language",
-  });
+  for (const name of extra.languages ?? []) found.set(name, { name, category: "Language" });
+  if (extra.hasJs ?? true) {
+    found.set(usesTypeScript ? "TypeScript" : "JavaScript", {
+      name: usesTypeScript ? "TypeScript" : "JavaScript",
+      category: "Language",
+    });
+  }
+  for (const item of extra.ecosystem ?? []) if (!found.has(item.name)) found.set(item.name, item);
   for (const [match, name, category] of TECH) {
     if (found.has(name)) continue;
     const pool = RUNTIME_CATEGORIES.has(category) ? runtime : all;
@@ -246,15 +257,89 @@ function packageJsonFiles(dir: string): string[] {
   return files.filter((f) => existsSync(/*turbopackIgnore: true*/ f));
 }
 
-const LANGUAGE_BY_EXT: Record<string, string> = {
-  ts: "TypeScript", mts: "TypeScript", cts: "TypeScript", tsx: "TSX",
-  js: "JavaScript", mjs: "JavaScript", cjs: "JavaScript", jsx: "JSX",
-};
+// ---------------------------------------------------------------------------------------------
+// Other ecosystems: what their build files say about the stack.
+
+const ECOSYSTEM_FILES = ["requirements.txt", "requirements-dev.txt", "pyproject.toml", "Pipfile", "setup.py", "setup.cfg", "go.mod", "Cargo.toml", "pom.xml", "build.gradle", "build.gradle.kts", "Gemfile", "composer.json", "pubspec.yaml", "mix.exs", "Package.swift"];
+
+const ECOSYSTEM_TECH: [RegExp, string, TechCategory][] = [
+  [/\bdjango\b/i, "Django", "Framework"],
+  [/\bflask\b/i, "Flask", "Framework"],
+  [/\bfastapi\b/i, "FastAPI", "Framework"],
+  [/\bstreamlit\b/i, "Streamlit", "UI"],
+  [/\b(torch|pytorch)\b/i, "PyTorch", "State & data"],
+  [/\btensorflow\b/i, "TensorFlow", "State & data"],
+  [/\bscikit-learn\b|\bsklearn\b/i, "scikit-learn", "State & data"],
+  [/\bpandas\b/i, "pandas", "State & data"],
+  [/\bnumpy\b/i, "NumPy", "State & data"],
+  [/\bsqlalchemy\b/i, "SQLAlchemy", "State & data"],
+  [/\bcelery\b/i, "Celery", "Backend"],
+  [/\bpytest\b/i, "pytest", "Testing"],
+  [/gin-gonic\/gin/, "Gin", "Framework"],
+  [/labstack\/echo/, "Echo", "Framework"],
+  [/gofiber\/fiber/, "Fiber", "Framework"],
+  [/google\.golang\.org\/grpc/, "gRPC", "Backend"],
+  [/gorm\.io\/gorm/, "GORM", "State & data"],
+  [/spf13\/cobra/, "Cobra", "Tooling"],
+  [/^\s*tokio\s*=/m, "Tokio", "Backend"],
+  [/^\s*actix-web\s*=/m, "Actix Web", "Framework"],
+  [/^\s*axum\s*=/m, "Axum", "Framework"],
+  [/^\s*rocket\s*=/m, "Rocket", "Framework"],
+  [/^\s*serde\s*=/m, "Serde", "State & data"],
+  [/^\s*(diesel|sqlx)\s*=/m, "SQLx / Diesel", "State & data"],
+  [/^\s*bevy\s*=/m, "Bevy", "Framework"],
+  [/^\s*clap\s*=/m, "clap", "Tooling"],
+  [/spring-boot/, "Spring Boot", "Framework"],
+  [/io\.ktor/, "Ktor", "Framework"],
+  [/hibernate/i, "Hibernate", "State & data"],
+  [/com\.android\.(application|library)|androidx\./, "Android", "Framework"],
+  [/junit/i, "JUnit", "Testing"],
+  [/['"]rails['"]/, "Rails", "Framework"],
+  [/['"]sinatra['"]/, "Sinatra", "Framework"],
+  [/['"]rspec(-rails)?['"]/, "RSpec", "Testing"],
+  [/laravel\/framework/, "Laravel", "Framework"],
+  [/symfony\/(framework-bundle|symfony)/, "Symfony", "Framework"],
+  [/phpunit\/phpunit/, "PHPUnit", "Testing"],
+  [/^\s*flutter:/m, "Flutter", "Framework"],
+  [/\{:phoenix,/, "Phoenix", "Framework"],
+  [/\{:ecto/, "Ecto", "State & data"],
+  [/vapor\/vapor/, "Vapor", "Framework"],
+  [/Microsoft\.AspNetCore|Sdk="Microsoft\.NET\.Sdk\.Web"/, "ASP.NET Core", "Framework"],
+  [/EntityFrameworkCore/, "Entity Framework", "State & data"],
+  [/\b(xunit|nunit|MSTest)\b/i, "xUnit / NUnit", "Testing"],
+];
+
+/** Build files of non-JS ecosystems in `dir` (and .csproj files one level down). */
+async function ecosystemText(dir: string): Promise<string> {
+  const files = ECOSYSTEM_FILES.map((f) => path.join(/*turbopackIgnore: true*/ dir, f));
+  try {
+    for (const entry of readdirSync(/*turbopackIgnore: true*/ dir, { withFileTypes: true }).slice(0, 200)) {
+      if (entry.isFile() && /\.(csproj|fsproj)$/.test(entry.name)) files.push(path.join(/*turbopackIgnore: true*/ dir, entry.name));
+      if (entry.isDirectory() && !entry.name.startsWith(".")) {
+        try {
+          for (const sub of readdirSync(/*turbopackIgnore: true*/ path.join(dir, entry.name)).slice(0, 100)) {
+            if (/\.(csproj|fsproj)$/.test(sub)) files.push(path.join(/*turbopackIgnore: true*/ dir, entry.name, sub));
+          }
+        } catch {
+          // unreadable folder
+        }
+      }
+    }
+  } catch {
+    // unreadable dir
+  }
+  const texts = await Promise.all(files.map((f) => readFile(/*turbopackIgnore: true*/ f, "utf8").catch(() => "")));
+  return texts.join("\n").slice(0, 2_000_000);
+}
+
+export function detectEcosystem(text: string): TechItem[] {
+  return ECOSYSTEM_TECH.filter(([re]) => re.test(text)).map(([, name, category]) => ({ name, category }));
+}
 
 export function languageBreakdown(graph: DepGraph): ProjectOverview["languages"] {
   const langs = new Map<string, { files: number; loc: number }>();
   for (const n of graph.nodes) {
-    const name = LANGUAGE_BY_EXT[n.id.slice(n.id.lastIndexOf(".") + 1)] ?? "Other";
+    const name = languageName(n.id);
     const entry = langs.get(name) ?? { files: 0, loc: 0 };
     entry.files++;
     entry.loc += n.loc;
@@ -304,6 +389,15 @@ export async function buildOverview(opts: {
   }
 
   const usesTypeScript = graph.nodes.some((n) => /\.[cm]?tsx?$/.test(n.id)) || existsSync(path.join(dir, "tsconfig.json"));
+  const languages = languageBreakdown(graph);
+  const hasJs = pkgs.length > 0 || graph.nodes.some((n) => n.role === "source" && /\.[cm]?[jt]sx?$/.test(n.id));
+  // Other languages that make up a real share of the code, largest first.
+  const totalLoc = languages.reduce((s, l) => s + l.loc, 0) || 1;
+  const otherLanguages = languages
+    .filter((l) => !["TypeScript", "TSX", "JavaScript", "JSX", "Other"].includes(l.name) && l.loc / totalLoc >= 0.05)
+    .slice(0, 4)
+    .map((l) => l.name);
+  const ecosystem = detectEcosystem((await Promise.all(searchDirs.map(ecosystemText))).join("\n"));
   const name =
     source.kind === "github"
       ? source.subdir
@@ -322,7 +416,7 @@ export async function buildOverview(opts: {
     packageInfo: main
       ? { name: str(main.name), version: str(main.version), scripts: Object.keys(main.scripts ?? {}).slice(0, 12) }
       : null,
-    techStack: detectTechStack(runtimeDeps, devDeps, usesTypeScript),
-    languages: languageBreakdown(graph),
+    techStack: detectTechStack(runtimeDeps, devDeps, usesTypeScript, { languages: otherLanguages, ecosystem, hasJs }),
+    languages,
   };
 }

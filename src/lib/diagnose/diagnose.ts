@@ -4,17 +4,19 @@ import {
   ochiai,
   posterior,
   ranks,
+  reviewLogBayesFactor,
   riskPrior,
   type LikelihoodParams,
   type Outcome,
   type PriorEntry,
   type PriorParams,
+  type ReviewParams,
   type TestEvidence,
 } from "./bayes";
 import { staticCoverage, testCases, type TestCoverage } from "./coverage";
 import { fileHistory, type Commit, type FileHistory, type HistoryOptions, type HistorySummary } from "./history";
 
-export interface DiagnosisParams extends PriorParams, LikelihoodParams, HistoryOptions {
+export interface DiagnosisParams extends PriorParams, LikelihoodParams, ReviewParams, HistoryOptions {
   /** Static coverage multiplier per extra import hop. */
   coverageDecay: number;
 }
@@ -26,8 +28,16 @@ export const DEFAULT_DIAGNOSIS_PARAMS: DiagnosisParams = {
   priorStrength: 1,
   activation: 0.6,
   noise: 0.05,
+  reviewRecall: 0.7,
+  reviewFalseAlarm: 0.1,
   coverageDecay: 0.5,
 };
+
+/** A code review's verdicts: files read, and the flagged ones with their strongest severity (0..1]. */
+export interface ReviewEvidence {
+  reviewed: ReadonlySet<string>;
+  flagged: ReadonlyMap<string, { weight: number; titles: string[] }>;
+}
 
 /** The parts of a diagnosis that do not depend on test outcomes or likelihood settings. */
 export interface DiagnosisBasis {
@@ -74,6 +84,8 @@ export interface FileRisk {
   factors: TestFactor[];
   /** Test files (any outcome) that reach this file. */
   coveredBy: number;
+  /** The code review's factor, if the file was reviewed. */
+  review: { logBF: number; flagged: boolean; titles: string[] } | null;
 }
 
 export interface Diagnosis {
@@ -90,7 +102,8 @@ export interface Diagnosis {
 export function scoreDiagnosis(
   basis: DiagnosisBasis,
   outcomes: ReadonlyMap<string, Outcome>,
-  params: PriorParams & LikelihoodParams,
+  params: PriorParams & LikelihoodParams & Partial<ReviewParams>,
+  review?: ReviewEvidence | null,
 ): Diagnosis {
   const { candidates, coverage } = basis;
   const prior = riskPrior(candidates, basis.history?.perFile ?? null, params);
@@ -100,7 +113,21 @@ export function scoreDiagnosis(
     if (outcome) evidence.push({ id: t.id, outcome, coverage: t.coverage });
   }
 
-  const post = posterior(new Map([...prior].map(([id, e]) => [id, e.p])), evidence, params);
+  const reviewParams = { reviewRecall: params.reviewRecall ?? DEFAULT_DIAGNOSIS_PARAMS.reviewRecall, reviewFalseAlarm: params.reviewFalseAlarm ?? DEFAULT_DIAGNOSIS_PARAMS.reviewFalseAlarm };
+  const reviewFactor = new Map<string, { logBF: number; flagged: boolean; titles: string[] }>();
+  if (review) {
+    for (const file of new Set([...review.reviewed, ...review.flagged.keys()])) {
+      if (!prior.has(file)) continue;
+      const flag = review.flagged.get(file);
+      reviewFactor.set(file, { logBF: reviewLogBayesFactor(flag ? flag.weight : null, reviewParams), flagged: !!flag, titles: flag?.titles ?? [] });
+    }
+  }
+  const post = posterior(
+    new Map([...prior].map(([id, e]) => [id, e.p])),
+    evidence,
+    params,
+    new Map([...reviewFactor].map(([f, r]) => [f, r.logBF])),
+  );
   const och = ochiai(prior.keys(), evidence);
   const rank = ranks(new Map([...post].map(([id, p]) => [id, p.logPosterior])));
   const ochiaiRank = ranks(och);
@@ -130,6 +157,7 @@ export function scoreDiagnosis(
     history: basis.history?.perFile.get(n.id) ?? null,
     factors: (factors.get(n.id) ?? []).sort((a, b) => Math.abs(b.logBF) - Math.abs(a.logBF) || a.test.localeCompare(b.test)),
     coveredBy: coveredBy.get(n.id) ?? 0,
+    review: reviewFactor.get(n.id) ?? null,
   }));
   files.sort((a, b) => a.rank - b.rank || a.id.localeCompare(b.id));
 

@@ -3,7 +3,9 @@ import { makeFileNode } from "@/lib/graph/extract";
 import type { DepGraph, FileNode } from "@/lib/graph/types";
 import { logBayesFactor, logSumExp, ochiai, pFail, posterior, ranks, riskPrior, type TestEvidence } from "./bayes";
 import { staticCoverage, testCases } from "./coverage";
+import { reviewLogBayesFactor } from "./bayes";
 import { DEFAULT_DIAGNOSIS_PARAMS, prepareDiagnosis, scoreDiagnosis } from "./diagnose";
+import { reviewEvidence, SEVERITY_WEIGHT } from "./review";
 import { fileHistory, GIT_LOG_FORMAT, isBugFix, parseGitLog, type Commit } from "./history";
 import { matchTestFile, parseTestReport, ReportError } from "./reports";
 
@@ -267,5 +269,24 @@ describe("scoreDiagnosis", () => {
     // utils: covered by the failing test (boost) and the passing one (penalty), both at 2 hops.
     expect(d.byId.get("src/utils.ts")!.factors.map((f) => f.outcome).sort()).toEqual(["fail", "pass"]);
     expect(d.byId.get("src/cart.ts")!.rank).toBe(3);
+  });
+
+  it("counts a code review as evidence: flagged files rise, files read and found clean fall", () => {
+    const sameSize = { ...g, nodes: g.nodes.map((n) => ({ ...n, loc: 10 })) };
+    const basis = prepareDiagnosis(sameSize, sameSize.nodes.filter((n) => n.role === "source"), null, DEFAULT_DIAGNOSIS_PARAMS);
+    const review = reviewEvidence({
+      findings: [{ file: "src/cart.ts", line: 3, severity: "high", title: "off by one", detail: "" }],
+      reviewed: ["src/utils.ts"],
+    });
+    const d = scoreDiagnosis(basis, new Map(), DEFAULT_DIAGNOSIS_PARAMS, review);
+    expect(d.files[0].id).toBe("src/cart.ts");
+    // ρ = 0.7, φ = 0.1: a high-severity flag multiplies the odds by 7, a clean read by 1/3.
+    expect(Math.exp(d.byId.get("src/cart.ts")!.review!.logBF)).toBeCloseTo(7, 9);
+    expect(Math.exp(d.byId.get("src/utils.ts")!.review!.logBF)).toBeCloseTo(1 / 3, 9);
+    expect(d.byId.get("src/pricing.ts")!.review).toBeNull();
+    expect(d.files.reduce((sum, f) => sum + f.posterior, 0)).toBeCloseTo(1);
+    // Posterior odds cart : pricing = 7 : 1 with equal priors.
+    expect(d.byId.get("src/cart.ts")!.posterior / d.byId.get("src/pricing.ts")!.posterior).toBeCloseTo(7, 6);
+    expect(reviewLogBayesFactor(SEVERITY_WEIGHT.low, DEFAULT_DIAGNOSIS_PARAMS)).toBeCloseTo(Math.log(1 + 0.3 * 6), 9);
   });
 });

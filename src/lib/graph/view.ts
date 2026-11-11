@@ -22,6 +22,9 @@ export interface ViewNode {
   color: number;
   god: boolean;
   inCycle: boolean;
+  /** AI architecture: what the module is for, and its tier (0 = top of the diagram). */
+  description?: string;
+  tier?: number;
 }
 
 export interface ViewEdge {
@@ -57,6 +60,7 @@ export function buildView(
   cycles: string[][],
   godFiles: ReadonlySet<string>,
   labels: Record<string, string> = {},
+  meta: { descriptions?: Record<string, string>; tiers?: Record<string, number> } = {},
 ): { nodes: ViewNode[]; edges: ViewEdge[] } {
   const cycleOf = new Map<string, number>();
   cycles.forEach((cycle, i) => cycle.forEach((f) => cycleOf.set(f, i)));
@@ -74,6 +78,8 @@ export function buildView(
       color: colors.get(module) ?? 0,
       god: files.some((f) => godFiles.has(f)),
       inCycle: files.some((f) => cycleOf.has(f)),
+      description: meta.descriptions?.[module],
+      tier: meta.tiers?.[module],
     };
     if (!expanded.has(module)) {
       nodes.push({ id: moduleNodeId(module), kind: "module", ...base });
@@ -81,12 +87,18 @@ export function buildView(
     }
     // Parents must precede their children for React Flow.
     nodes.push({ id: moduleNodeId(module), kind: "group", ...base });
+    const baseName = (f: string) => f.slice(f.lastIndexOf("/") + 1);
+    const names = new Map<string, number>();
+    for (const f of files) names.set(baseName(f), (names.get(baseName(f)) ?? 0) + 1);
     for (const file of files) {
+      // Path inside the module, so lib/auth.ts and lib/validations/auth.ts stay distinguishable;
+      // in a module that is not a folder, the name — with its folder when two files share it.
+      const name = baseName(file);
+      const label = file.startsWith(`${module}/`) ? file.slice(module.length + 1) : names.get(name)! > 1 ? file.split("/").slice(-2).join("/") : name;
       nodes.push({
         id: fileNodeId(file),
         kind: "file",
-        // Path inside the module, so lib/auth.ts and lib/validations/auth.ts stay distinguishable.
-        label: file.startsWith(`${module}/`) ? file.slice(module.length + 1) : file.slice(file.lastIndexOf("/") + 1),
+        label,
         module,
         file,
         parent: moduleNodeId(module),

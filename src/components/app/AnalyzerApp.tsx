@@ -31,6 +31,7 @@ export function AnalyzerApp() {
   const [progress, setProgress] = useState<Progress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("overview");
+  const [assistantOpen, setAssistantOpen] = useState(true);
   const abortRef = useRef<AbortController | null>(null);
   const github = useGitHubSession();
 
@@ -112,6 +113,16 @@ export function AnalyzerApp() {
             ))}
           </nav>
 
+          <button
+            onClick={() => setAssistantOpen((v) => !v)}
+            aria-pressed={assistantOpen}
+            title={assistantOpen ? "Hide the AI assistant" : "Ask the AI assistant about this project"}
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-[13px] font-medium transition ${assistantOpen ? "bg-[var(--ai-soft)] text-[var(--ai)]" : "text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--foreground)]"}`}
+          >
+            <Icon.Sparkle className="h-4 w-4" />
+            AI
+          </button>
+
           <div className="ml-auto flex w-full max-w-[420px] items-center gap-3">
             {progress && (
               <span className="hidden shrink-0 items-center gap-2 text-[12px] text-[var(--muted)] xl:flex">
@@ -142,7 +153,15 @@ export function AnalyzerApp() {
           </div>
         )}
 
-        <ProjectWorkspace key={result.id} data={data} analysedAt={result.at} tab={tab} onTabChange={setTab} />
+        <ProjectWorkspace
+          key={result.id}
+          data={data}
+          analysedAt={result.at}
+          tab={tab}
+          onTabChange={setTab}
+          assistantOpen={assistantOpen}
+          onAssistantOpenChange={setAssistantOpen}
+        />
       </div>
     </ReactFlowProvider>
   );

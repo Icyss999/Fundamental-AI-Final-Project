@@ -16,6 +16,10 @@ export type MapperNodeData = {
   /** Refactor mode: a plan moved this file (or a file in this module) / the current step touches it. */
   moved?: boolean;
   focus?: boolean;
+  /** The AI assistant highlighted this file (or a file in this module). */
+  marked?: boolean;
+  /** AI review findings in this file / module, and the worst severity. */
+  findings?: { count: number; severity: "high" | "medium" | "low" };
 };
 export type MapperNode = Node<MapperNodeData>;
 
@@ -65,7 +69,7 @@ export function Badges({ view }: { view: Pick<ViewNode, "inCycle" | "god"> }) {
   );
 }
 
-function stateClass({ selected, dimmed, focus }: MapperNodeData): string {
+function stateClass({ selected, dimmed, focus, marked }: MapperNodeData): string {
   return [
     "transition-[opacity,box-shadow,background-color] duration-150",
     dimmed ? "opacity-30" : "opacity-100",
@@ -73,7 +77,9 @@ function stateClass({ selected, dimmed, focus }: MapperNodeData): string {
       ? "ring-2 ring-[color:var(--accent)] ring-offset-2 ring-offset-[color:var(--canvas)]"
       : focus
         ? "ring-2 ring-[color:var(--added)] ring-offset-2 ring-offset-[color:var(--canvas)]"
-        : "",
+        : marked
+          ? "ring-2 ring-[color:var(--ai)] ring-offset-2 ring-offset-[color:var(--canvas)]"
+          : "",
   ].join(" ");
 }
 
@@ -83,6 +89,18 @@ function RiskPill({ prob }: { prob?: number }) {
   return (
     <span title="Probability that the bug is here" className="shrink-0 rounded-full border border-[var(--node-border)] bg-[var(--panel)] px-1.5 py-px text-[10px] font-semibold tabular-nums text-[var(--foreground)]">
       {formatProb(prob)}
+    </span>
+  );
+}
+
+/** AI review findings: count, coloured by the worst severity. */
+function FindingsBadge({ findings }: { findings?: MapperNodeData["findings"] }) {
+  if (!findings) return null;
+  const tone = findings.severity === "high" ? "bg-[var(--danger-soft)] text-[var(--danger)]" : findings.severity === "medium" ? "bg-[var(--warn-soft)] text-[var(--warn)]" : "bg-[var(--hover)] text-[var(--muted)]";
+  return (
+    <span title={`AI review: ${findings.count} ${findings.count === 1 ? "finding" : "findings"} (worst: ${findings.severity})`} className={`inline-flex shrink-0 items-center gap-0.5 rounded px-1.5 py-px text-[10px] font-semibold ${tone}`}>
+      <Icon.Alert className="h-2.5 w-2.5" />
+      {findings.count}
     </span>
   );
 }
@@ -103,7 +121,7 @@ export function ModuleNode({ data }: NodeProps<MapperNode>) {
     <div
       className={`group flex h-full w-full cursor-pointer overflow-hidden rounded-xl border bg-[var(--module-bg)] shadow-[0_1px_2px_rgb(0_0_0/0.06)] hover:shadow-[0_4px_14px_rgb(0_0_0/0.10)] ${view.inCycle ? "border-[var(--danger)]" : "border-[var(--node-border)]"} ${stateClass(data)}`}
       style={data.heat !== undefined ? { background: heatBackground(data.heat, "var(--module-bg)") } : undefined}
-      title={`${view.module} — click to expand`}
+      title={`${view.label}${view.description ? ` — ${view.description}` : ""}${view.tier !== undefined ? ` (tier ${view.tier})` : ""}\n${view.fileCount} files — click to expand`}
     >
       <Handles />
       <span className="w-1.5 shrink-0" style={{ background: colorVar(view.color) }} />
@@ -112,12 +130,13 @@ export function ModuleNode({ data }: NodeProps<MapperNode>) {
           <span className="truncate text-[13.5px] font-semibold tracking-tight text-[var(--foreground)]">{view.label}</span>
           <span className="flex shrink-0 items-center gap-1">
             <MovedBadge moved={data.moved} />
+            <FindingsBadge findings={data.findings} />
             {data.prob !== undefined ? <RiskPill prob={data.prob} /> : <Badges view={view} />}
           </span>
         </div>
         <span className="flex items-center justify-between gap-2 text-[11.5px] text-[var(--muted)]">
           <span className="truncate">
-            {view.fileCount} {view.fileCount === 1 ? "file" : "files"} · {formatLoc(view.loc)} lines
+            {view.description ?? `${view.fileCount} ${view.fileCount === 1 ? "file" : "files"} · ${formatLoc(view.loc)} lines`}
           </span>
           <svg className="h-3.5 w-3.5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
             <path d="M3 6h10M3 10h10" strokeLinecap="round" />
@@ -136,6 +155,7 @@ export function GroupNode({ data }: NodeProps<MapperNode>) {
     <div
       className={`h-full w-full rounded-2xl border ${view.inCycle ? "border-[var(--danger)]" : "border-[var(--node-border)]"} ${stateClass(data)}`}
       style={{ background: `color-mix(in srgb, ${color} 7%, var(--canvas))` }}
+      title={view.description ? `${view.label} — ${view.description}${view.tier !== undefined ? ` (tier ${view.tier})` : ""}` : undefined}
     >
       <Handles />
       <div className="flex h-10 items-center gap-2 px-3.5">
@@ -145,6 +165,7 @@ export function GroupNode({ data }: NodeProps<MapperNode>) {
           {view.fileCount} {view.fileCount === 1 ? "file" : "files"} · {formatLoc(view.loc)} lines
         </span>
         <RiskPill prob={data.prob} />
+        <FindingsBadge findings={data.findings} />
         <span className="flex-1" />
         {data.href && <GitHubLink href={data.href} title="Open this folder on GitHub" />}
         <button
@@ -174,6 +195,7 @@ export function FileNode({ data }: NodeProps<MapperNode>) {
       <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: colorVar(view.color) }} />
       <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-[var(--foreground)]">{view.label}</span>
       <MovedBadge moved={data.moved} />
+      <FindingsBadge findings={data.findings} />
       {data.prob !== undefined ? (
         <RiskPill prob={data.prob} />
       ) : (

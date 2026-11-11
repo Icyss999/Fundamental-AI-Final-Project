@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { AnalysisResult } from "@/lib/analyze";
+import { compareSearches, type SearchComparison } from "@/lib/change/describe";
 import { planRefactoring, type Heuristic, type PlanResult, type PlanStep } from "@/lib/change/planner";
 import { Policy, suggestRules } from "@/lib/change/rules";
 import type { Outcome } from "@/lib/diagnose/bayes";
 import { DEFAULT_DIAGNOSIS_PARAMS, prepareDiagnosis, scoreDiagnosis, type DiagnosisParams } from "@/lib/diagnose/diagnose";
 import { parseTestReport, ReportError } from "@/lib/diagnose/reports";
+import { reviewEvidence, type Review } from "@/lib/diagnose/review";
 import type { ProjectAnalysis } from "@/lib/graph/project-analysis";
 import { importKey } from "@/lib/graph/types";
 
@@ -15,16 +17,7 @@ export interface ReportNote {
   text: string;
 }
 
-export interface Comparison {
-  heuristic: Heuristic;
-  status: PlanResult["status"];
-  cost: number;
-  steps: number;
-  expanded: number;
-  generated: number;
-  hStart: number;
-  ms: number;
-}
+export type Comparison = SearchComparison;
 
 export interface PlanOptionsState {
   heuristic: Heuristic;
@@ -40,12 +33,18 @@ export function useLayers(data: AnalysisResult, analysis: ProjectAnalysis) {
   const [outcomes, setOutcomes] = useState<ReadonlyMap<string, Outcome>>(new Map());
   const [params, setParams] = useState<DiagnosisParams>(DEFAULT_DIAGNOSIS_PARAMS);
   const [reportNote, setReportNote] = useState<ReportNote | null>(null);
+  /** The last report loaded (its failure messages are evidence the assistant can read). */
+  const [report, setReport] = useState<{ name: string; text: string } | null>(null);
   const { halfLifeDays, maxFilesPerCommit, coverageDecay } = params;
   const basis = useMemo(
     () => prepareDiagnosis(data.graph, analysis.graph.nodes, data.history?.commits ?? null, { halfLifeDays, maxFilesPerCommit, coverageDecay }),
     [data, analysis, halfLifeDays, maxFilesPerCommit, coverageDecay],
   );
-  const diagnosis = useMemo(() => scoreDiagnosis(basis, outcomes, params), [basis, outcomes, params]);
+  /** The AI's code review; its verdicts count as Bayes evidence while `useReview` is on. */
+  const [review, setReview] = useState<Review | null>(null);
+  const [useReview, setUseReview] = useState(true);
+  const evidence = useMemo(() => (review && useReview ? reviewEvidence(review) : null), [review, useReview]);
+  const diagnosis = useMemo(() => scoreDiagnosis(basis, outcomes, params, evidence), [basis, outcomes, params, evidence]);
   const testIds = useMemo(() => basis.coverage.map((c) => c.id), [basis]);
 
   const setOutcome = (test: string, outcome: Outcome | null) =>
@@ -60,6 +59,7 @@ export function useLayers(data: AnalysisResult, analysis: ProjectAnalysis) {
     try {
       const parsed = parseTestReport(text, testIds);
       setOutcomes(parsed.outcomes);
+      setReport({ name, text });
       const failed = [...parsed.outcomes.values()].filter((o) => o === "fail").length;
       const extra = parsed.unmatched.length > 0 ? ` ${parsed.unmatched.length} entries matched no test file here.` : "";
       setReportNote({ tone: "ok", text: `${name}: ${parsed.outcomes.size} test files (${failed} failing), read as ${parsed.format}.${extra}` });
@@ -78,14 +78,14 @@ export function useLayers(data: AnalysisResult, analysis: ProjectAnalysis) {
   const policy = useMemo(() => new Policy(rulesText, analysis.prefix), [rulesText, analysis.prefix]);
   const evaluation = useMemo(() => policy.evaluate(files, analysis.graph.edges), [policy, files, analysis]);
   const [planOptions, setPlanOptions] = useState<PlanOptionsState>({ heuristic: "matching", riskWeight: 1 });
-  const [planned, setPlanned] = useState<{ result: PlanResult; policy: Policy } | null>(null);
-  const [comparison, setComparison] = useState<{ rows: Comparison[]; policy: Policy } | null>(null);
+  const [planned, setPlanned] = useState<{ result: PlanResult; rules: string } | null>(null);
+  const [comparison, setComparison] = useState<{ rows: Comparison[]; rules: string } | null>(null);
   const [planning, setPlanning] = useState(false);
   const [stepState, setStep] = useState(0);
   const [playing, setPlaying] = useState(false);
 
   // A plan belongs to the rules it was made for; editing the rules retires it.
-  const plan = planned && planned.policy === policy ? planned.result : null;
+  const plan = planned && planned.rules === rulesText ? planned.result : null;
   const step = plan ? Math.min(stepState, plan.steps.length) : 0;
 
   const problem = () => ({
@@ -101,7 +101,7 @@ export function useLayers(data: AnalysisResult, analysis: ProjectAnalysis) {
     setPlaying(false);
     setTimeout(() => {
       const result = planRefactoring(problem(), { heuristic: planOptions.heuristic, riskWeight: planOptions.riskWeight, timeLimitMs: 4000 });
-      setPlanned({ result, policy });
+      setPlanned({ result, rules: rulesText });
       setStep(0);
       setPlanning(false);
     }, 30);
@@ -110,15 +110,25 @@ export function useLayers(data: AnalysisResult, analysis: ProjectAnalysis) {
   const runComparison = () => {
     setPlanning(true);
     setTimeout(() => {
-      const p = problem();
-      const rows = (["matching", "count", "zero"] as Heuristic[]).map((heuristic) => {
-        const r = planRefactoring(p, { heuristic, riskWeight: planOptions.riskWeight, timeLimitMs: 4000 });
-        return { heuristic, status: r.status, cost: r.cost, steps: r.steps.length, expanded: r.stats.expanded, generated: r.stats.generated, hStart: r.stats.hStart, ms: r.stats.ms };
-      });
-      setComparison({ rows, policy });
+      setComparison({ rows: compareSearches(problem(), planOptions.riskWeight), rules: rulesText });
       setPlanning(false);
     }, 30);
   };
+
+  /** Shows a plan computed elsewhere (the assistant) for `rules`, from its first step. */
+  const adoptPlan = (result: PlanResult, rules: string) => {
+    setPlaying(false);
+    setPlanned({ result, rules });
+    setStep(0);
+  };
+
+  const adoptComparison = (rows: Comparison[], rules: string) => setComparison({ rows, rules });
+
+  /** Code changes the AI wrote for plan steps (1-based), kept with the plan they belong to. */
+  const [patchSet, setPatchSet] = useState<{ plan: PlanResult; byStep: ReadonlyMap<number, { diff: string; note?: string }> } | null>(null);
+  const patches = patchSet && plan && patchSet.plan === plan ? patchSet.byStep : null;
+  const attachPatch = (forPlan: PlanResult, step: number, diff: string, note?: string) =>
+    setPatchSet((prev) => ({ plan: forPlan, byStep: new Map(prev?.plan === forPlan ? prev.byStep : []).set(step, { diff, note }) }));
 
   // Playback: advance one step at a time, then stop at the end.
   useEffect(() => {
@@ -146,6 +156,7 @@ export function useLayers(data: AnalysisResult, analysis: ProjectAnalysis) {
 
   return {
     // Layer 2
+    basis,
     diagnosis,
     outcomes,
     setOutcome,
@@ -154,6 +165,11 @@ export function useLayers(data: AnalysisResult, analysis: ProjectAnalysis) {
     setParams,
     loadReport,
     reportNote,
+    report,
+    review,
+    setReview,
+    useReview,
+    setUseReview,
     // Layer 3
     rulesText,
     setRulesText,
@@ -165,8 +181,12 @@ export function useLayers(data: AnalysisResult, analysis: ProjectAnalysis) {
     plan,
     planning,
     runPlan,
-    comparison: comparison && comparison.policy === policy ? comparison.rows : null,
+    comparison: comparison && comparison.rules === rulesText ? comparison.rows : null,
     runComparison,
+    adoptPlan,
+    adoptComparison,
+    patches,
+    attachPatch,
     step,
     setStep: (s: number) => {
       setPlaying(false);

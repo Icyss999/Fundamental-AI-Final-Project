@@ -1,3 +1,4 @@
+import type { Grouping, GroupingKind } from "@/lib/cluster/grouping";
 import { degrees, findCycles, findGodFiles, type Degree, type GodFile } from "./analysis";
 import {
   architectureSummary,
@@ -16,6 +17,11 @@ export interface ProjectAnalysis {
   graph: DepGraph;
   partition: Partition;
   labels: Record<string, string>;
+  /** What the modules are: folders (default), search clusters, or the AI's architecture. */
+  grouping: GroupingKind;
+  /** AI architecture only: one line per module, and its tier (0 = top). */
+  descriptions: Record<string, string>;
+  tiers: Record<string, number>;
   /** Folder shared by every file, e.g. "src". */
   prefix: string;
   modules: Map<string, string[]>;
@@ -35,9 +41,20 @@ export interface ProjectAnalysis {
 const SOURCE_ONLY: ReadonlySet<FileRole> = new Set(["source"]);
 const ALL_ROLES: ReadonlySet<FileRole> = new Set(["source", "test", "story", "example", "config", "declaration"]);
 
-export function analyzeProject(full: DepGraph, name: string, includeAll: boolean): ProjectAnalysis {
+/**
+ * `grouping` replaces the folder modules (files it does not cover, e.g. tests, keep their folder
+ * module); the folder prefix is kept either way, since rules and paths are written against it.
+ */
+export function analyzeProject(full: DepGraph, name: string, includeAll: boolean, grouping?: Grouping | null): ProjectAnalysis {
   const graph = filterGraph(full, includeAll ? ALL_ROLES : SOURCE_ONLY);
-  const { partition, labels, prefix } = autoFolderPartition(graph);
+  const folders = autoFolderPartition(graph);
+  const { prefix } = folders;
+  let { partition, labels } = folders;
+  if (grouping) {
+    partition = {};
+    for (const n of graph.nodes) partition[n.id] = grouping.partition[n.id] ?? folders.partition[n.id];
+    labels = { ...folders.labels, ...grouping.labels };
+  }
   const modules = modulesOf(partition);
   const { edges: moduleEdges, internal } = moduleGraph(graph, partition);
   const degree = degrees(graph);
@@ -48,6 +65,9 @@ export function analyzeProject(full: DepGraph, name: string, includeAll: boolean
     graph,
     partition,
     labels,
+    grouping: grouping?.kind ?? "folders",
+    descriptions: grouping?.descriptions ?? {},
+    tiers: grouping?.tiers ?? {},
     prefix,
     modules,
     moduleEdges,

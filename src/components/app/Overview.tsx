@@ -12,11 +12,41 @@ import { Card, Chip, formatCount, Icon, timeAgo } from "./ui";
 
 export type ShowTarget = { type: "file" | "module"; id: string };
 
+/** GitHub's language colours. */
 const LANGUAGE_COLORS: Record<string, string> = {
   TypeScript: "#3178c6",
   TSX: "#6aa7e8",
   JavaScript: "#d4a72c",
   JSX: "#f0cf65",
+  Python: "#3572A5",
+  Java: "#b07219",
+  Kotlin: "#A97BFF",
+  Scala: "#c22d40",
+  Groovy: "#4298b8",
+  Go: "#00ADD8",
+  Rust: "#dea584",
+  C: "#555555",
+  "C++": "#f34b7d",
+  "Objective-C": "#438eff",
+  "C#": "#178600",
+  PHP: "#4F5D95",
+  Ruby: "#701516",
+  Swift: "#F05138",
+  Dart: "#00B4AB",
+  Vue: "#41b883",
+  Svelte: "#ff3e00",
+  Astro: "#ff5a03",
+  Lua: "#000080",
+  Elixir: "#6e4a7e",
+  Erlang: "#B83998",
+  Haskell: "#5e5086",
+  Elm: "#60B5CC",
+  Clojure: "#db5855",
+  Perl: "#0298c3",
+  R: "#198CE7",
+  Julia: "#a270ba",
+  Shell: "#89e051",
+  Zig: "#ec915c",
   Other: "#9ca3af",
 };
 const CATEGORY_ORDER: TechCategory[] = ["Language", "Framework", "UI", "Styling", "State & data", "Backend", "Testing", "Tooling"];
@@ -75,6 +105,7 @@ export function Overview({
   history,
   onShow,
   onOpenDiagram,
+  ai,
 }: {
   overview: ProjectOverview;
   analysis: ProjectAnalysis;
@@ -85,6 +116,8 @@ export function Overview({
   history: HistoryData | null;
   onShow: (target: ShowTarget, mode?: DiagramMode) => void;
   onOpenDiagram: (mode?: DiagramMode) => void;
+  /** The AI autopilot's card, shown under the project's identity. */
+  ai?: React.ReactNode;
 }) {
   const { source, github } = overview;
   const colors = moduleColors(analysis.modules.keys(), analysis.labels);
@@ -199,6 +232,8 @@ export function Overview({
         </div>
       </section>
 
+      {ai}
+
       {/* What it is + numbers */}
       <div className="grid gap-5 lg:grid-cols-5">
         <Card title="What this project is" className="lg:col-span-3">
@@ -276,7 +311,7 @@ export function Overview({
               </li>
             ))}
           </ul>
-          <p className="mt-4 text-[12px] text-[var(--muted)]">Counted over all {formatCount(roles.source + hidden)} JS/TS files, including tests and examples.</p>
+          <p className="mt-4 text-[12px] text-[var(--muted)]">Counted over all {formatCount(roles.source + hidden)} code files, including tests and examples.</p>
         </Card>
       </div>
 

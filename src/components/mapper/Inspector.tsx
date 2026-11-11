@@ -92,7 +92,7 @@ export function Inspector({
     body = (
       <>
         <p className="text-[13px] leading-relaxed text-[var(--muted)]">
-          Each box is a folder of code. <strong className="font-medium text-[var(--foreground)]">Click</strong> one to open it,{" "}
+          Each box is {analysis.grouping === "ai" ? "a module of the architecture the AI designed (stacked by tier)" : analysis.grouping === "clusters" ? "a cluster the MQ search found" : "a folder of code"}. <strong className="font-medium text-[var(--foreground)]">Click</strong> one to open it,{" "}
           <strong className="font-medium text-[var(--foreground)]">hover</strong> to trace its imports, and{" "}
           <strong className="font-medium text-[var(--foreground)]">drag</strong> to rearrange.
         </p>
@@ -151,8 +151,17 @@ export function Inspector({
     body = (
       <>
         <p className="text-[15px] font-semibold tracking-tight">{labels[id] ?? id}</p>
-        <p className="mt-0.5 break-all font-mono text-[11.5px] text-[var(--muted)]">{id}/</p>
-        <GitHubButton href={githubModuleLink(source, id)} label="Open folder on GitHub" />
+        {analysis.grouping === "folders" ? (
+          <>
+            <p className="mt-0.5 break-all font-mono text-[11.5px] text-[var(--muted)]">{id}/</p>
+            <GitHubButton href={githubModuleLink(source, id)} label="Open folder on GitHub" />
+          </>
+        ) : (
+          <p className="mt-1 text-[12.5px] leading-relaxed text-[var(--muted)]">
+            {analysis.descriptions[id] ?? "A cluster found by the MQ search: files that import each other more than the rest."}
+            {analysis.tiers[id] !== undefined && <span className="ml-1.5 rounded bg-[var(--ai-soft)] px-1.5 py-px text-[10.5px] font-semibold text-[var(--ai)]">tier {analysis.tiers[id]}</span>}
+          </p>
+        )}
         <div className="mt-4 grid grid-cols-3 gap-2">
           <MiniStat label="files" value={files.length} />
           <MiniStat label="lines" value={formatLoc(files.reduce((s, f) => s + (locOf.get(f) ?? 0), 0))} />

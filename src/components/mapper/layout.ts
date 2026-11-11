@@ -88,16 +88,21 @@ export async function layoutView(nodes: ViewNode[], edges: ViewEdge[]): Promise<
     }
   }
 
+  // AI architecture: each module's tier fixes its band, top to bottom (ELK partitioning).
+  const tiered = nodes.some((n) => !n.parent && n.tier !== undefined);
+  const tier = (n: ViewNode): LayoutOptions => (tiered ? { "elk.partitioning.partition": String(n.tier ?? 0) } : {});
+
   const graph: ElkNode = {
     id: "root",
-    layoutOptions: ROOT_OPTIONS,
+    layoutOptions: tiered ? { ...ROOT_OPTIONS, "elk.partitioning.activate": "true" } : ROOT_OPTIONS,
     children: nodes
       .filter((n) => !n.parent)
       .map((n): ElkNode => {
-        if (n.kind !== "group") return { id: n.id, ...nodeSize(n) };
+        if (n.kind !== "group") return { id: n.id, ...nodeSize(n), layoutOptions: tier(n) };
         return {
           id: n.id,
           layoutOptions: {
+            ...tier(n),
             "elk.padding": `[top=${GROUP_HEADER + 16},left=20,bottom=20,right=20]`,
             "elk.nodeSize.constraints": "MINIMUM_SIZE",
             // ELK swaps width/height of a compound node's minimum size when direction is DOWN

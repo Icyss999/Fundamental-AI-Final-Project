@@ -3,11 +3,12 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Icon, Spinner } from "@/components/app/ui";
 import type { SidebarContext } from "@/components/mapper/DiagramView";
-import { Heading, Note, PanelButton } from "@/components/mapper/panel";
+import { CodeBlock } from "@/components/assistant/Markdown";
+import { AskButton, Heading, Note, PanelButton } from "@/components/mapper/panel";
 import { formatFact, parseRules, type Proof } from "@/lib/change/engine";
-import { DEFAULT_PLAN_OPTIONS, edgesAfter, formatAtom, splitEdge, type Heuristic, type PlanStep, type StateDelta } from "@/lib/change/planner";
+import { describeStep, pathAfter, rewrites, structureMetrics } from "@/lib/change/describe";
+import { formatAtom, splitEdge, type Heuristic, type PlanStep, type StateDelta } from "@/lib/change/planner";
 import { RULE_BASE } from "@/lib/change/rules";
-import { findCycles } from "@/lib/graph/analysis";
 import type { ProjectAnalysis } from "@/lib/graph/project-analysis";
 import { baseName, relPath } from "./format";
 import type { Layers } from "./useLayers";
@@ -27,11 +28,6 @@ const SYNTAX: [string, string][] = [
 ];
 
 const ENGINE_RULES = new Map(parseRules(RULE_BASE).map((r) => [r.id, r.text]));
-
-function pathIn(delta: StateDelta | null, file: string): string {
-  const moved = delta?.moves.find(([f]) => f === file);
-  return moved ? `${moved[1] ? `${moved[1]}/` : ""}${baseName(file)}` : file;
-}
 
 function ProofTree({ proof, prefix, depth = 0 }: { proof: Proof; prefix: string; depth?: number }) {
   const strip = (s: string) => (prefix ? s.split(`${prefix}/`).join("") : s);
@@ -59,16 +55,16 @@ function ProofTree({ proof, prefix, depth = 0 }: { proof: Proof; prefix: string;
   );
 }
 
-function ViolationRow({ edge, layers, delta, prefix, ctx }: { edge: string; layers: Layers; delta: StateDelta | null; prefix: string; ctx: SidebarContext }) {
+function ViolationRow({ edge, layers, delta, prefix, ctx, onAsk }: { edge: string; layers: Layers; delta: StateDelta | null; prefix: string; ctx: SidebarContext; onAsk?: (prompt: string) => void }) {
   const [open, setOpen] = useState(false);
   const [a, b] = splitEdge(edge);
-  const reasons = open ? layers.policy.explain(pathIn(delta, a), pathIn(delta, b)) : [];
+  const reasons = open ? layers.policy.explain(pathAfter(delta, a), pathAfter(delta, b)) : [];
   return (
     <li className="rounded-md hover:bg-[var(--hover)]">
       <button onClick={() => setOpen((v) => !v)} className="flex w-full items-baseline gap-1.5 px-2 py-1 text-left" title="Why is this a violation?">
         <span className={`text-[10px] text-[var(--muted)] transition-transform ${open ? "rotate-90" : ""}`}>▶</span>
         <span className="min-w-0 flex-1 truncate font-mono text-[11.5px]">
-          {relPath(pathIn(delta, a), prefix)} <span className="text-[var(--danger)]">→</span> {relPath(pathIn(delta, b), prefix)}
+          {relPath(pathAfter(delta, a), prefix)} <span className="text-[var(--danger)]">→</span> {relPath(pathAfter(delta, b), prefix)}
         </span>
       </button>
       {open && (
@@ -85,6 +81,9 @@ function ViolationRow({ edge, layers, delta, prefix, ctx }: { edge: string; laye
           <div className="flex gap-1">
             <PanelButton onClick={() => ctx.focusFile(a)}>Show {baseName(a)}</PanelButton>
             <PanelButton onClick={() => ctx.focusFile(b)}>Show {baseName(b)}</PanelButton>
+            {onAsk && (
+              <AskButton onClick={() => onAsk(`Explain why \`${a}\` → \`${b}\` breaks the rules, and how I should fix it in the code.`)}>Ask AI</AskButton>
+            )}
           </div>
         </div>
       )}
@@ -101,7 +100,7 @@ function describe(step: PlanStep, prefix: string): { title: ReactNode; sub: stri
           Move <code className="font-mono">{baseName(a.file)}</code> to <code className="font-mono">{relPath(a.to, prefix) || "/"}/</code>
         </>
       ),
-      sub: `from ${relPath(a.from, prefix) || "/"}/ · rewrites ${Math.round(step.costParts.rewrites / DEFAULT_PLAN_OPTIONS.rewriteCost)} import paths`,
+      sub: `from ${relPath(a.from, prefix) || "/"}/ · rewrites ${rewrites(step)} import paths`,
     };
   }
   return {
@@ -139,21 +138,7 @@ function PlayerButton({ children, ...props }: React.ComponentProps<"button">) {
   );
 }
 
-/** Structure metrics of the source graph after a plan state. */
-function metrics(analysis: ProjectAnalysis, delta: StateDelta | null, violations: number) {
-  const edges = delta ? edgesAfter(analysis.graph.edges, delta) : analysis.graph.edges;
-  const dir = (f: string) => {
-    const moved = delta?.moves.find(([x]) => x === f);
-    return moved ? moved[1] : f.slice(0, Math.max(0, f.lastIndexOf("/")));
-  };
-  return {
-    violations,
-    cycles: findCycles({ ...analysis.graph, edges }).length,
-    crossFolder: edges.filter((e) => dir(e.source) !== dir(e.target)).length,
-  };
-}
-
-export function ChangePanel({ layers, ctx, analysis }: { layers: Layers; ctx: SidebarContext; analysis: ProjectAnalysis }) {
+export function ChangePanel({ layers, ctx, analysis, onAsk }: { layers: Layers; ctx: SidebarContext; analysis: ProjectAnalysis; onAsk?: (prompt: string) => void }) {
   const { policy, evaluation, plan, step, currentStep, violationsNow, planOptions, setPlanOptions, comparison, planning } = layers;
   const [syntax, setSyntax] = useState(false);
   const prefix = analysis.prefix;
@@ -163,7 +148,7 @@ export function ChangePanel({ layers, ctx, analysis }: { layers: Layers; ctx: Si
     const groups = new Map<string, string[]>();
     for (const key of [...violationsNow].sort()) {
       const [a, b] = splitEdge(key);
-      for (const r of policy.check(pathIn(delta, a), pathIn(delta, b))) groups.set(r, [...(groups.get(r) ?? []), key]);
+      for (const r of policy.check(pathAfter(delta, a), pathAfter(delta, b))) groups.set(r, [...(groups.get(r) ?? []), key]);
     }
     return [...groups.entries()].sort(([x], [y]) => Number(x.slice(1)) - Number(y.slice(1)));
   }, [violationsNow, policy, delta]);
@@ -171,7 +156,7 @@ export function ChangePanel({ layers, ctx, analysis }: { layers: Layers; ctx: Si
   const outcome = useMemo(() => {
     if (!plan || plan.steps.length === 0) return null;
     const last = plan.steps[plan.steps.length - 1];
-    return { before: metrics(analysis, null, plan.initialViolations.length), after: metrics(analysis, last.state, plan.finalViolations.length) };
+    return { before: structureMetrics(analysis.graph, null, plan.initialViolations.length), after: structureMetrics(analysis.graph, last.state, plan.finalViolations.length) };
   }, [plan, analysis]);
 
   const n = plan?.steps.length ?? 0;
@@ -252,7 +237,7 @@ export function ChangePanel({ layers, ctx, analysis }: { layers: Layers; ctx: Si
                   </p>
                   <ul>
                     {keys.map((k) => (
-                      <ViolationRow key={k} edge={k} layers={layers} delta={delta} prefix={prefix} ctx={ctx} />
+                      <ViolationRow key={k} edge={k} layers={layers} delta={delta} prefix={prefix} ctx={ctx} onAsk={onAsk} />
                     ))}
                   </ul>
                 </div>
@@ -408,6 +393,7 @@ export function ChangePanel({ layers, ctx, analysis }: { layers: Layers; ctx: Si
                               {sub}
                             </span>
                             <span className="block text-[11px] text-[var(--muted)]">
+                              {layers.patches?.get(i + 1) && <span className="mr-1 font-medium text-[var(--ai)]">patch ready ·</span>}
                               fixes {s.fixed.length}
                               {s.introduced.length > 0 && <span className="text-[var(--danger)]"> · breaks {s.introduced.length}</span>} · {s.remaining} left
                             </span>
@@ -434,6 +420,22 @@ export function ChangePanel({ layers, ctx, analysis }: { layers: Layers; ctx: Si
                                 <span className="min-w-0 break-all">{atoms.map((x) => (prefix ? x.split(`${prefix}/`).join("") : x)).join(", ")}</span>
                               </div>
                             ))}
+                            {layers.patches?.get(i + 1) && (
+                              <div className="mt-2 font-sans">
+                                <p className="flex items-center gap-1 text-[11px] font-semibold text-[var(--ai)]">
+                                  <Icon.Sparkle className="h-3 w-3" /> Patch written by AI{layers.patches.get(i + 1)!.note ? ` — ${layers.patches.get(i + 1)!.note}` : ""}
+                                </p>
+                                <CodeBlock lang="diff" text={layers.patches.get(i + 1)!.diff} />
+                              </div>
+                            )}
+                            {onAsk && !layers.patches?.get(i + 1) && (
+                              <AskButton
+                                className="mt-1.5"
+                                onClick={() => onAsk(`Write the code changes for step ${i + 1} of the plan: ${describeStep(s, prefix)}. Read the files involved and give me unified diffs.`)}
+                              >
+                                Ask AI to write this change
+                              </AskButton>
+                            )}
                           </div>
                         )}
                       </li>

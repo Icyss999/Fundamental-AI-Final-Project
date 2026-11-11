@@ -86,6 +86,37 @@ function githubHeaders(token?: string): HeadersInit {
   return headers;
 }
 
+/** True for names `parseGitHubUrl` would accept (for owner/repo values that arrive on their own). */
+export function isValidRepoName(owner: string, repo: string): boolean {
+  return OWNER.test(owner) && REPO.test(repo) && repo !== "." && repo !== "..";
+}
+
+/**
+ * One file at a commit, as text. Uses the API when there is a token (private repos, higher limit),
+ * else raw.githubusercontent.com (no API rate limit). `filePath` is relative to the repository root.
+ */
+export async function fetchRepoFile(owner: string, repo: string, commit: string, filePath: string, maxBytes: number, token?: string): Promise<string> {
+  const encoded = filePath.split("/").map(encodeURIComponent).join("/");
+  const auth = token || process.env.GITHUB_TOKEN;
+  const request = (withAuth: boolean) =>
+    withAuth
+      ? fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${encoded}?ref=${commit}`, {
+          headers: { ...githubHeaders(token), Accept: "application/vnd.github.raw" },
+          signal: AbortSignal.timeout(10_000),
+        })
+      : fetch(`https://raw.githubusercontent.com/${owner}/${repo}/${commit}/${encoded}`, { signal: AbortSignal.timeout(10_000) });
+  let res = await request(!!auth);
+  // An expired token should not block a public repository.
+  if (res.status === 401 && auth) res = await request(false);
+  if (res.status === 404) throw new RepoError(`${filePath} was not found at commit ${commit.slice(0, 7)}.`);
+  if (!res.ok) throw new RepoError(`GitHub returned ${res.status} for ${filePath}.`);
+  const length = Number(res.headers.get("content-length") ?? 0);
+  if (length > maxBytes) throw new RepoError(`${filePath} is too large to read (${Math.round(length / 1024)} KB).`);
+  const text = await res.text();
+  if (text.length > maxBytes) throw new RepoError(`${filePath} is too large to read (${Math.round(text.length / 1024)} KB).`);
+  return text;
+}
+
 /**
  * Repository metadata from the GitHub API. Returns null when the API is unavailable
  * (e.g. rate-limited) so analysis can still go ahead from the clone alone.

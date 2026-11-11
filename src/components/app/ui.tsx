@@ -109,6 +109,27 @@ export const Icon = {
       <path d="M5.5 4.5L2 8l3.5 3.5M10.5 4.5L14 8l-3.5 3.5" />
     </svg>
   ),
+  Sparkle: (p: IconProps) => (
+    <svg {...base} {...p}>
+      <path d="M8 1.75l1.4 3.6a2 2 0 0 0 1.25 1.25L14.25 8l-3.6 1.4a2 2 0 0 0-1.25 1.25L8 14.25l-1.4-3.6A2 2 0 0 0 5.35 9.4L1.75 8l3.6-1.4A2 2 0 0 0 6.6 5.35L8 1.75z" />
+    </svg>
+  ),
+  Send: (p: IconProps) => (
+    <svg {...base} {...p}>
+      <path d="M8 13V3M3.5 7.5L8 3l4.5 4.5" />
+    </svg>
+  ),
+  Stop: (p: IconProps) => (
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden {...p}>
+      <rect x="4" y="4" width="8" height="8" rx="1.5" />
+    </svg>
+  ),
+  Copy: (p: IconProps) => (
+    <svg {...base} {...p}>
+      <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
+      <path d="M10.5 5.5V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2" />
+    </svg>
+  ),
   Alert: (p: IconProps) => (
     <svg {...base} {...p}>
       <path d="M8 1.75L14.5 13.5h-13L8 1.75zM8 6.25v3M8 11.25v.01" />

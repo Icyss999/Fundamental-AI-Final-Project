@@ -174,8 +174,9 @@ export function Landing({
           ))}
         </div>
         <p className="mt-8 text-[12px] text-[var(--muted)]">
-          Works with JavaScript and TypeScript repositories — public ones right away, private ones after you sign in. The
-          code is downloaded and read, never run, and your GitHub token stays on the server.
+          Works with repositories in JavaScript/TypeScript, Python, Java, Kotlin, Go, Rust, C/C++, C#, PHP, Ruby, Swift, Dart
+          and more — public ones right away, private ones after you sign in. The code is downloaded and read, never run, and
+          your GitHub token stays on the server.
         </p>
       </div>
     </main>

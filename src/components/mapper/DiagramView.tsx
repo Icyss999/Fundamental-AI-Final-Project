@@ -16,6 +16,7 @@ import {
   type XYPosition,
 } from "@xyflow/react";
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
+import { Icon } from "@/components/app/ui";
 import { findCycles } from "@/lib/graph/analysis";
 import { modulesOf } from "@/lib/graph/partition";
 import type { ProjectAnalysis } from "@/lib/graph/project-analysis";
@@ -56,6 +57,17 @@ export interface DiagramOverlay {
   /** Files and imports the current plan step touches. */
   focusFiles?: ReadonlySet<string>;
   focusImports?: ReadonlySet<string>;
+  /** Files the AI assistant pointed at (any mode). */
+  marked?: ReadonlySet<string>;
+  /** AI review findings per file (any mode). */
+  findings?: ReadonlyMap<string, { count: number; severity: "high" | "medium" | "low" }>;
+}
+
+/** The grouping control: which modules the diagram shows (folders, MQ clusters, AI architecture). */
+export interface GroupingControl {
+  value: "folders" | "clusters" | "ai";
+  options: { value: "folders" | "clusters" | "ai"; label: string; mq?: number; disabled?: boolean; title?: string }[];
+  onChange: (value: "folders" | "clusters" | "ai") => void;
 }
 
 export interface SidebarContext {
@@ -70,6 +82,8 @@ export interface DiagramHandle {
   focusModule: (module: string) => void;
   /** Opens these modules (used to follow a plan step). */
   expandModules: (modules: string[]) => void;
+  /** Opens the modules of these files and frames them all. */
+  frameFiles: (files: string[]) => void;
 }
 
 interface LaidOut {
@@ -92,6 +106,9 @@ export function DiagramView({
   sidebar,
   animate = false,
   forceExpanded,
+  onSelectionChange,
+  onClearMarked,
+  grouping,
   ref,
 }: {
   analysis: ProjectAnalysis;
@@ -112,6 +129,10 @@ export function DiagramView({
   animate?: boolean;
   /** Modules shown open regardless of what the user expanded (those a plan touches). */
   forceExpanded?: readonly string[];
+  onSelectionChange?: (selection: Selection) => void;
+  /** Shown as a button while `overlay.marked` has files. */
+  onClearMarked?: () => void;
+  grouping?: GroupingControl;
   ref?: Ref<DiagramHandle>;
 }) {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
@@ -127,8 +148,8 @@ export function DiagramView({
   /** Positions the user dragged nodes to, by view node id. They survive expand/collapse re-layouts. */
   const pinsRef = useRef(new Map<string, XYPosition>());
   const [hasPins, setHasPins] = useState(false);
-  /** Node to frame once the next layout lands (null = fit everything). */
-  const focusRef = useRef<{ id: string; padding: number } | null>(null);
+  /** Nodes to frame once the next layout lands (null = fit everything). */
+  const focusRef = useRef<{ ids: string[]; padding: number } | null>(null);
   const animateRef = useRef(animate);
   // Declared before the layout effect, so a re-layout sees the current value.
   useEffect(() => {
@@ -140,18 +161,18 @@ export function DiagramView({
   const partition = display?.partition ?? analysis.partition;
   const cycles = useMemo(() => (display ? findCycles(display.graph) : analysis.cycles), [display, analysis.cycles]);
   const forcedKey = forceExpanded?.join("\0") ?? "";
-  /** Frame everything after the next layout even while animating (a new plan opened modules). */
+  /** Frame everything after the next layout even while animating (a plan opened modules, or the grouping changed). */
   const refitRef = useRef(false);
   useEffect(() => {
     refitRef.current = true;
-  }, [forcedKey]);
+  }, [forcedKey, analysis.partition]);
   const shown = useMemo<ReadonlySet<string>>(
     () => (forcedKey ? new Set([...expanded, ...forcedKey.split("\0")]) : expanded),
     [expanded, forcedKey],
   );
   const view = useMemo(
-    () => buildView(graph, partition, shown, cycles, analysis.godSet, analysis.labels),
-    [graph, partition, shown, cycles, analysis.godSet, analysis.labels],
+    () => buildView(graph, partition, shown, cycles, analysis.godSet, analysis.labels, { descriptions: analysis.descriptions, tiers: analysis.tiers }),
+    [graph, partition, shown, cycles, analysis.godSet, analysis.labels, analysis.descriptions, analysis.tiers],
   );
   const moduleFiles = useMemo(() => modulesOf(partition), [partition]);
 
@@ -200,7 +221,7 @@ export function DiagramView({
       focusRef.current = null;
       void fitView(
         focus
-          ? { nodes: [{ id: focus.id }], duration: 450, maxZoom: 1.2, padding: focus.padding }
+          ? { nodes: focus.ids.map((id) => ({ id })), duration: 450, maxZoom: 1.2, padding: focus.padding }
           : { duration: 450, padding: 0.15, maxZoom: 1.1 },
       );
     });
@@ -268,6 +289,7 @@ export function DiagramView({
   }, [mode, overlay?.heat, layout, moduleFiles]);
 
   const refactor = mode === "refactor";
+  const findingsByFile = overlay?.findings;
   const displayNodes = useMemo(
     () =>
       layout?.nodes.map((n) => {
@@ -275,21 +297,32 @@ export function DiagramView({
         const p = heat?.value.get(n.id);
         const max = heat?.max;
         const files = v.kind === "file" ? [v.file!] : (moduleFiles.get(v.module) ?? []);
+        let findings: MapperNode["data"]["findings"];
+        if (findingsByFile && v.kind !== "group") {
+          for (const f of files) {
+            const x = findingsByFile.get(f);
+            if (!x) continue;
+            const worse = !findings || x.severity === "high" || (x.severity === "medium" && findings.severity === "low");
+            findings = { count: (findings?.count ?? 0) + x.count, severity: worse ? x.severity : findings!.severity };
+          }
+        }
         return {
           ...n,
           data: {
             ...n.data,
             selected: n.id === selectedViewId,
             dimmed: highlight !== null && v.kind !== "group" && !highlight.nodes.has(n.id),
-            href: v.kind === "file" ? githubLink(source, v.file!, "blob") : v.kind === "group" ? githubModuleLink(source, v.module) : null,
+            href: v.kind === "file" ? githubLink(source, v.file!, "blob") : v.kind === "group" && analysis.grouping === "folders" ? githubModuleLink(source, v.module) : null,
             prob: p,
             heat: p !== undefined && v.kind !== "group" && max ? p / max : undefined,
             moved: refactor && v.kind !== "group" && files.some((f) => overlay?.moved?.has(f)),
             focus: refactor && v.kind !== "group" && files.some((f) => overlay?.focusFiles?.has(f)),
+            marked: v.kind !== "group" && files.some((f) => overlay?.marked?.has(f)),
+            findings,
           },
         };
       }) ?? [],
-    [layout, selectedViewId, highlight, source, heat, moduleFiles, refactor, overlay?.moved, overlay?.focusFiles],
+    [layout, selectedViewId, highlight, source, heat, moduleFiles, refactor, overlay?.moved, overlay?.focusFiles, overlay?.marked, findingsByFile, analysis.grouping],
   );
 
   const displayEdges = useMemo<RoutedEdgeType[]>(
@@ -338,7 +371,7 @@ export function DiagramView({
     const v = node.data.view;
     if (v.kind === "module") {
       // Frame the opened module so its files are readable straight away.
-      focusRef.current = { id: node.id, padding: 0.12 };
+      focusRef.current = { ids: [node.id], padding: 0.12 };
       expand(v.module);
       setSelection({ type: "module", id: v.module });
     } else if (v.kind === "group") {
@@ -355,32 +388,43 @@ export function DiagramView({
     }
   };
 
-  /** Zooms to a view node now if it is on screen, otherwise after the next layout. */
-  const zoomTo = (viewId: string) => {
-    if (layout?.nodes.some((n) => n.id === viewId)) {
-      void fitView({ nodes: [{ id: viewId }], duration: 450, maxZoom: 1.2, padding: 0.8 });
+  /** Zooms to view nodes now if they are all on screen, otherwise after the next layout. */
+  const zoomTo = (viewIds: string[], padding = 0.8) => {
+    if (viewIds.every((id) => layout?.nodes.some((n) => n.id === id))) {
+      void fitView({ nodes: viewIds.map((id) => ({ id })), duration: 450, maxZoom: 1.2, padding });
     } else {
-      focusRef.current = { id: viewId, padding: 0.8 };
+      focusRef.current = { ids: viewIds, padding };
     }
   };
 
   const focusFile = (file: string) => {
     if (!partition[file]) return;
     setSelection({ type: "file", id: file });
-    zoomTo(fileNodeId(file));
+    zoomTo([fileNodeId(file)]);
     expand(partition[file]);
   };
 
   const focusModule = (module: string) => {
     if (!moduleFiles.has(module)) return;
     setSelection({ type: "module", id: module });
-    zoomTo(moduleNodeId(module));
+    zoomTo([moduleNodeId(module)]);
   };
 
   const expandModules = (modules: string[]) =>
     setExpanded((prev) => (modules.every((m) => prev.has(m)) ? prev : new Set([...prev, ...modules])));
 
-  useImperativeHandle(ref, () => ({ focusFile, focusModule, expandModules }));
+  const frameFiles = (files: string[]) => {
+    const known = files.filter((f) => partition[f]);
+    if (known.length === 0) return;
+    expandModules([...new Set(known.map((f) => partition[f]))]);
+    zoomTo(known.map(fileNodeId), known.length === 1 ? 0.8 : 0.25);
+  };
+
+  useImperativeHandle(ref, () => ({ focusFile, focusModule, expandModules, frameFiles }));
+
+  useEffect(() => {
+    onSelectionChange?.(selection);
+  }, [selection, onSelectionChange]);
 
   const allExpanded = expanded.size === moduleFiles.size;
   const ctx: SidebarContext = { selection, clear: () => setSelection(null), focusFile, focusModule };
@@ -411,7 +455,7 @@ export function DiagramView({
           {/* Raised so the Next.js dev indicator does not cover it. */}
           <Controls showInteractive={false} style={{ marginBottom: 64 }} />
           <MiniMap pannable zoomable nodeStrokeWidth={2} nodeBorderRadius={6} className="!rounded-lg !border !border-[var(--border)] !bg-[var(--panel)]" />
-          <Panel position="top-left" className="!m-3">
+          <Panel position="top-left" className="!m-3 flex flex-col items-start gap-2">
             <div className="flex items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--panel)] p-1 shadow-sm">
               <ToolbarButton onClick={() => setExpanded(allExpanded ? new Set() : new Set(moduleFiles.keys()))}>
                 {allExpanded ? "Collapse all" : "Expand all"}
@@ -430,7 +474,40 @@ export function DiagramView({
                 </>
               ) : null}
             </div>
+            {grouping && (
+              <label
+                className="flex items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--panel)] py-1 pl-2.5 pr-1 text-[12.5px] shadow-sm"
+                title="What the boxes are: folders, clusters found by the MQ search, or the architecture the AI designed"
+              >
+                <span className="text-[var(--muted)]">Modules</span>
+                <select
+                  value={grouping.value}
+                  onChange={(e) => grouping.onChange(e.target.value as GroupingControl["value"])}
+                  className={`rounded-md border border-[var(--border)] bg-[var(--panel)] px-1.5 py-0.5 text-[12.5px] font-medium ${grouping.value === "ai" ? "text-[var(--ai)]" : ""}`}
+                >
+                  {grouping.options.map((o) => (
+                    <option key={o.value} value={o.value} disabled={o.disabled} title={o.title}>
+                      {o.label}
+                      {o.mq !== undefined ? ` · MQ ${o.mq.toFixed(2)}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </Panel>
+          {overlay?.marked && overlay.marked.size > 0 && onClearMarked && (
+            <Panel position="bottom-center" className="!mb-4">
+              <button
+                onClick={onClearMarked}
+                title="Clear the files the AI assistant highlighted"
+                className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-1.5 text-[12.5px] font-medium text-[var(--ai)] shadow-sm hover:bg-[var(--ai-soft)]"
+              >
+                <Icon.Sparkle className="h-3.5 w-3.5" />
+                {overlay.marked.size} {overlay.marked.size === 1 ? "file" : "files"} highlighted by AI
+                <Icon.Close className="h-3 w-3" />
+              </button>
+            </Panel>
+          )}
           {onModeChange && (
             <Panel position="top-right" className="!m-3">
               <div className="flex rounded-xl border border-[var(--border)] bg-[var(--panel)] p-1 shadow-sm" role="tablist" aria-label="Diagram mode">

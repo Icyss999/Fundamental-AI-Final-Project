@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Icon } from "@/components/app/ui";
 
 /** Building blocks shared by the diagram's side panels (Inspector, Bug risk, Refactor). */
 
@@ -46,4 +47,17 @@ export function PanelButton({ className = "", ...props }: React.ComponentProps<"
 export function Note({ children, tone = "muted" }: { children: ReactNode; tone?: "muted" | "danger" | "warn" }) {
   const color = tone === "danger" ? "text-[var(--danger)]" : tone === "warn" ? "text-[var(--warn)]" : "text-[var(--muted)]";
   return <p className={`px-0.5 text-[12px] leading-relaxed ${color}`}>{children}</p>;
+}
+
+/** Hands a question about this item to the AI assistant. */
+export function AskButton({ className = "", children, ...props }: React.ComponentProps<"button">) {
+  return (
+    <button
+      {...props}
+      className={`inline-flex items-center gap-1 rounded-md bg-[var(--ai-soft)] px-2 py-0.5 text-[11.5px] font-medium text-[var(--ai)] hover:brightness-95 disabled:pointer-events-none disabled:opacity-40 dark:hover:brightness-125 ${className}`}
+    >
+      <Icon.Sparkle className="h-3 w-3" />
+      {children}
+    </button>
+  );
 }

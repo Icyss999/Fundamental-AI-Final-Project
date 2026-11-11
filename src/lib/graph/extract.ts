@@ -6,19 +6,38 @@ import path from "node:path";
 import { cruise, type ICruiseOptions, type ICruiseResult } from "dependency-cruiser";
 import extractTSConfig from "dependency-cruiser/config-utl/extract-ts-config";
 import ts from "typescript";
+import { extractPolyglot } from "./polyglot";
 import type { DepGraph, FileNode, FileRole, ImportEdge } from "./types";
 
 /** Folders that never contain project source we want on the diagram. */
 const IGNORED_PATHS = "(^|/)(node_modules|\\.next|\\.nuxt|\\.svelte-kit|\\.turbo|\\.git|dist|build|out|coverage)(/|$)";
-/** Only code files are components; imported assets (CSS, SVG, JSON...) are left off the graph. */
-const SOURCE_FILE = /\.(?:[cm]?[jt]sx?)$/;
+/**
+ * The JS/TS files dependency-cruiser reads (plus components it resolves imports to); other
+ * languages come from the polyglot extractor. Assets (CSS, SVG, JSON...) are left off the graph.
+ */
+const SOURCE_FILE = /\.(?:[cm]?[jt]sx?|vue|svelte|astro)$/;
 
-const TEST_FILE =
-  /(^|\/)(__tests__|__mocks__|__fixtures__|tests?|test-d|specs?|e2e|cypress|playwright|testing)\/|\.(test|spec|e2e|test-d)\.[cm]?[jt]sx?$/;
+/** Test files, by each ecosystem's convention. */
+const TEST_FILE = new RegExp(
+  [
+    String.raw`(^|/)(__tests__|__mocks__|__fixtures__|tests?|Tests?|test-d|specs?|e2e|cypress|playwright|testing|androidTest|testFixtures)/`,
+    String.raw`\.(test|spec|e2e|test-d)\.[cm]?[jt]sx?$`,
+    String.raw`(^|/)test_[^/]*\.py$|_test\.py$|(^|/)conftest\.py$`,
+    String.raw`_test\.(go|dart|exs|rb|c|cc|cpp)$|_unittest\.(cc|cpp)$|_spec\.rb$`,
+    String.raw`[a-z0-9](Test|Tests|IT|Spec|Specs)\.(java|kt|kts|scala|groovy|cs|swift|php|m|mm|hs)$`,
+    String.raw`(^|/)[^/]+\.(Tests?|UnitTests|IntegrationTests)/`,
+  ].join("|"),
+);
 const STORY_FILE = /\.stories\.[cm]?[jt]sx?$|(^|\/)\.storybook\//;
-const EXAMPLE_FILE = /(^|\/)(examples?|demos?|docs?|website|playground|sandbox|benchmarks?|bench|fixtures?)\//;
-const DECLARATION_FILE = /\.d\.[cm]?ts$/;
-const CONFIG_FILE = /(^|\/)[^/]*\.config\.[cm]?[jt]s$|(^|\/)\.[^/]+rc\.[cm]?[jt]s$|(^|\/)(jest|vitest)\.setup\.[cm]?[jt]sx?$|^scripts\//;
+const EXAMPLE_FILE = /(^|\/)(examples?|samples?|demos?|docs?|website|playground|sandbox|benchmarks?|benches|bench|fixtures?)\/|(^|\/)[^/]+\.(Examples?|Samples?|Demos?|Benchmarks?)\//;
+const DECLARATION_FILE = /\.d\.[cm]?ts$|\.pyi$/;
+const CONFIG_FILE = new RegExp(
+  [
+    String.raw`(^|/)[^/]*\.config\.[cm]?[jt]s$|(^|/)\.[^/]+rc\.[cm]?[jt]s$|(^|/)(jest|vitest)\.setup\.[cm]?[jt]sx?$|^scripts/`,
+    // Build scripts and generated migrations of other ecosystems.
+    String.raw`(^|/)(setup|noxfile|fabfile)\.py$|(^|/)build\.rs$|(^|/)Package\.swift$|\.gradle\.kts$|\.gradle$|(^|/)(migrations|db/migrate)/`,
+  ].join("|"),
+);
 
 export function classifyFile(id: string): FileRole {
   if (DECLARATION_FILE.test(id)) return "declaration";
@@ -47,7 +66,8 @@ export interface ExtractResult {
 }
 
 /**
- * Runs dependency-cruiser over a JS/TS project and returns its file-level import graph.
+ * The project's file-level import graph in every supported language. JS/TS goes through
+ * dependency-cruiser (the rest through the polyglot extractor, merged in at the end).
  * Only project files are kept: npm packages, Node built-ins and unresolvable imports are dropped.
  * When the project has a usable tsconfig.json it is passed to dependency-cruiser so path aliases
  * such as `@/lib/db` resolve to real files.
@@ -86,10 +106,15 @@ export async function extractGraph(projectRoot: string): Promise<ExtractResult> 
       }
     }),
   );
-  if (graph.nodes.length === 0) {
-    warnings.push("No JavaScript or TypeScript files were found.");
+
+  // Every other language: Python, Java/Kotlin, Go, Rust, C/C++, C#, PHP, Ruby, Swift, Dart...
+  const other = await extractPolyglot(root);
+  warnings.push(...other.warnings);
+  const merged = mergeGraphs(graph, other.sources.map((s) => makeFileNode(s.id, countLines(s.text))), other.edges);
+  if (merged.nodes.length === 0) {
+    warnings.push("No source files in a supported language were found.");
   }
-  return { graph, warnings };
+  return { graph: merged, warnings };
 }
 
 /**
@@ -133,6 +158,21 @@ function resolveTsConfig(root: string, warnings: string[]): string | null {
     warnings.push("tsconfig.json could not be read, so path aliases (like @/…) may not resolve.");
     return null;
   }
+}
+
+/** Adds files and imports found by the other-language extractor (imports between known files only). */
+export function mergeGraphs(graph: DepGraph, files: FileNode[], edges: readonly { source: string; target: string }[]): DepGraph {
+  const nodes = new Map(graph.nodes.map((n) => [n.id, n]));
+  for (const f of files) if (!nodes.has(f.id)) nodes.set(f.id, f);
+  const keys = new Set(graph.edges.map((e) => `${e.source}\0${e.target}`));
+  const all = [...graph.edges];
+  for (const e of edges) {
+    const key = `${e.source}\0${e.target}`;
+    if (e.source === e.target || keys.has(key) || !nodes.has(e.source) || !nodes.has(e.target)) continue;
+    keys.add(key);
+    all.push({ source: e.source, target: e.target, typeOnly: false });
+  }
+  return { ...graph, nodes: [...nodes.values()].sort((a, b) => a.id.localeCompare(b.id)), edges: all };
 }
 
 export function countLines(text: string): number {

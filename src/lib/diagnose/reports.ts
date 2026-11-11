@@ -29,7 +29,27 @@ export function matchTestFile(reported: string, testIds: readonly string[]): str
   }
   if (best) return best;
   const shorter = testIds.filter((id) => id.endsWith(`/${path}`));
-  return shorter.length === 1 ? shorter[0] : null;
+  if (shorter.length === 1) return shorter[0];
+
+  // JUnit class names from other languages: com.shop.PricingTest (Java), tests.test_api.TestCart
+  // (pytest): read dots as folders, matched without the extension, dropping trailing class names.
+  if (!path.includes("/") && path.includes(".")) {
+    const segs = path.split(".");
+    for (let k = segs.length; k > 0; k--) {
+      const stem = segs.slice(0, k).join("/");
+      const hits = testIds.filter((id) => {
+        const noExt = id.replace(/\.[^./]+$/, "");
+        return noExt === stem || noExt.endsWith(`/${stem}`);
+      });
+      if (hits.length > 0) return [...hits].sort((a, b) => a.length - b.length)[0];
+    }
+  }
+  // Go reports name the package (an import path): its folder, when it holds one test file.
+  const inDir = testIds.filter((id) => {
+    const dir = id.slice(0, Math.max(0, id.lastIndexOf("/")));
+    return dir !== "" && (path === dir || path.endsWith(`/${dir}`));
+  });
+  return inDir.length === 1 ? inDir[0] : null;
 }
 
 function record(outcomes: Map<string, Outcome>, id: string, outcome: Outcome) {
@@ -118,4 +138,53 @@ function parseJUnit(xml: string, testIds: readonly string[]): ParsedReport {
   }
   if (cases === 0) throw new ReportError("No <testcase> elements found in the XML report.");
   return { format: "junit", outcomes, unmatched: [...unmatched] };
+}
+
+export interface TestFailure {
+  /** Test file id, or the reported path when it matches no test file. */
+  test: string;
+  /** Test case name. */
+  name: string;
+  message: string;
+}
+
+/**
+ * The failure messages in a report, per test case (for the assistant: an assertion message
+ * usually says what is wrong). Jest/Vitest and Mocha JSON, and JUnit XML.
+ */
+export function reportFailures(text: string, testIds: readonly string[]): TestFailure[] {
+  const trimmed = text.trim();
+  const at = (reported: string) => matchTestFile(reported, testIds) ?? reported;
+  const out: TestFailure[] = [];
+  if (trimmed.startsWith("<")) {
+    for (const tc of trimmed.matchAll(/<testcase\b([^>]*?)>([\s\S]*?)<\/testcase>/g)) {
+      const failure = tc[2].match(/<(failure|error)\b([^>]*?)(?:\/>|>([\s\S]*?)<\/\1>)/);
+      if (!failure) continue;
+      const a = attributes(tc[1]);
+      out.push({ test: at(a.file ?? a.classname ?? ""), name: a.name ?? "", message: attributes(failure[2]).message ?? failure[3]?.trim() ?? "" });
+    }
+    return out;
+  }
+  let data: Record<string, unknown>;
+  try {
+    data = JSON.parse(trimmed);
+  } catch {
+    return out;
+  }
+  if (Array.isArray(data.testResults)) {
+    for (const r of data.testResults as Record<string, unknown>[]) {
+      const file = at(String(r.name ?? r.testFilePath ?? ""));
+      const cases = Array.isArray(r.assertionResults) ? (r.assertionResults as Record<string, unknown>[]) : [];
+      for (const c of cases) {
+        const messages = Array.isArray(c.failureMessages) ? (c.failureMessages as string[]) : [];
+        if (c.status === "failed") out.push({ test: file, name: String(c.fullName ?? c.title ?? ""), message: messages.join("\n") });
+      }
+      if (r.status === "failed" && cases.length === 0 && typeof r.message === "string") out.push({ test: file, name: "", message: r.message });
+    }
+  } else if (Array.isArray(data.failures)) {
+    for (const f of data.failures as { file?: string; fullTitle?: string; title?: string; err?: { message?: string } }[]) {
+      out.push({ test: at(f.file ?? ""), name: f.fullTitle ?? f.title ?? "", message: f.err?.message ?? "" });
+    }
+  }
+  return out;
 }

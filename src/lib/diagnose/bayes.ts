@@ -32,6 +32,15 @@
  *   BF_t(f) = P(outcome_t | h_f, c) / P(outcome_t | h_f, c = 0)
  *
  * Posterior ∝ prior × Π BF. The same factors are what "why suspected" shows.
+ *
+ * Code review (the AI assistant reading files) is evidence of the same kind. Reviewing a file is
+ * like covering it: if f is faulty, a review flags it with probability ρ ("recall"), scaled by the
+ * finding's severity w ∈ (0, 1]; any file is flagged by mistake with probability φ ("false alarm").
+ *
+ *   flagged:            BF = (φ + w·(ρ − φ)) / φ
+ *   read, not flagged:  BF = (1 − ρ) / (1 − φ)      (a clean review lowers the odds)
+ *
+ * Files not reviewed get no factor, exactly like files no test covers.
  */
 
 import type { FileHistory } from "./history";
@@ -50,6 +59,20 @@ export interface LikelihoodParams {
   activation: number;
   /** ε: P(test fails | it does not run the faulty file). */
   noise: number;
+}
+
+export interface ReviewParams {
+  /** ρ: P(a review flags the faulty file | it was reviewed). */
+  reviewRecall: number;
+  /** φ: P(a review flags a file that is not faulty). */
+  reviewFalseAlarm: number;
+}
+
+/** ln BF of a review of one file: `weight` is the flagged finding's severity (0..1], null = read and found clean. */
+export function reviewLogBayesFactor(weight: number | null, { reviewRecall: rho, reviewFalseAlarm: phi }: ReviewParams): number {
+  if (weight === null) return Math.log((1 - rho) / (1 - phi));
+  const w = Math.min(1, Math.max(0, weight));
+  return Math.log((phi + w * (rho - phi)) / phi);
 }
 
 export interface PriorEntry {
@@ -124,9 +147,11 @@ export function posterior(
   prior: ReadonlyMap<string, number>,
   tests: readonly TestEvidence[],
   params: LikelihoodParams,
+  /** Other evidence per file, as ln BF (code review). */
+  extra?: ReadonlyMap<string, number>,
 ): Map<string, { logPosterior: number; p: number }> {
   const logPost = new Map<string, number>();
-  for (const [file, p] of prior) logPost.set(file, Math.log(p));
+  for (const [file, p] of prior) logPost.set(file, Math.log(p) + (extra?.get(file) ?? 0));
   for (const t of tests) {
     for (const [file, c] of t.coverage) {
       const current = logPost.get(file);
