@@ -5,6 +5,7 @@
  */
 
 import { architectureGrouping, type ArchitectureModule, type ClusterRun, type Grouping } from "@/lib/cluster/grouping";
+import { isModuleKind } from "@/lib/graph/kinds";
 import { describeStep, structureMetrics } from "@/lib/change/describe";
 import { formatFact, type Proof } from "@/lib/change/engine";
 import type { Heuristic } from "@/lib/change/planner";
@@ -45,7 +46,6 @@ export const TOOL_LABELS: Record<string, string> = {
   get_file: "Inspecting",
   cluster_modules: "Clustering (MQ search)",
   set_architecture: "Rearranging the diagram",
-  set_grouping: "Regrouping the diagram",
   report_findings: "Recording review findings",
   attach_patch: "Attaching a patch",
   read_file: "Reading",
@@ -262,7 +262,7 @@ const HANDLERS: Record<string, Handler> = {
   cluster_modules(ws, args) {
     const algorithm = oneOf(args, "algorithm", ["annealing", "hill_climbing"] as const) ?? "annealing";
     const start = oneOf(args, "start", ["singletons", "folders"] as const) ?? "singletons";
-    const run = ws.cluster({ algorithm: algorithm === "annealing" ? "annealing" : "hill-climbing", start, seed: int(args, "seed", 42, 0, 2 ** 31) }, args.show !== false);
+    const run = ws.cluster({ algorithm: algorithm === "annealing" ? "annealing" : "hill-climbing", start, seed: int(args, "seed", 42, 0, 2 ** 31) });
     const s = run.stats;
     const clusters = Object.keys(run.grouping.labels).length;
     return {
@@ -271,7 +271,6 @@ const HANDLERS: Record<string, Handler> = {
         mq: round(run.grouping.mq, 3),
         folder_mq: round(run.folderMQ, 3),
         search: { algorithm, start, iterations: s.iterations, accepted: s.accepted, worse_moves_accepted: algorithm === "annealing" ? s.uphill : undefined, restarts: s.restarts || undefined, ms: s.ms },
-        shown_on_diagram: args.show !== false,
         ...describeGrouping(ws, run.grouping),
       },
     };
@@ -293,6 +292,7 @@ const HANDLERS: Record<string, Handler> = {
       const name = str(r, "name", true).trim().slice(0, 48);
       const purpose = (str(r, "purpose") ?? "").trim().slice(0, 200);
       const tier = int(r, "tier", i, 0, 9);
+      const kind = isModuleKind(r.kind) ? r.kind : undefined;
       for (const c of strs(r, "clusters")) {
         const files = clusters ? Object.entries(clusters.grouping.partition).filter(([, id]) => id === c.trim()).map(([f]) => f) : [];
         if (files.length === 0) unknown.push(clusters ? `cluster ${c}` : `cluster ${c} (run cluster_modules first)`);
@@ -312,7 +312,7 @@ const HANDLERS: Record<string, Handler> = {
           unknown.push(name2);
         }
       }
-      return { name, purpose, tier };
+      return { name, purpose, tier, kind };
     });
     for (const [f, i] of explicit) owner.set(f, i);
     const unassigned = source.filter((f) => !owner.has(f));
@@ -329,22 +329,12 @@ const HANDLERS: Record<string, Handler> = {
       content: {
         applied: true,
         mq: { architecture: round(grouping.mq, 3), clusters: clusters ? round(clusters.grouping.mq, 3) : null, folders: round(s.grouping.folderMQ, 3) },
-        modules: modules.map((m) => `${m.name} (tier ${m.tier}): ${m.files.length} files`),
+        modules: modules.map((m) => `${m.name} (tier ${m.tier}${m.kind ? `, ${m.kind}` : ""}): ${m.files.length} files`),
         unsorted: unassigned.length ? unassigned.slice(0, 40) : undefined,
         empty_modules: empty.length ? empty : undefined,
         unknown: unknown.length ? unknown : undefined,
       },
     };
-  },
-
-  set_grouping(ws, args) {
-    const kind = oneOf(args, "kind", ["folders", "clusters", "ai"] as const);
-    if (!kind) throw new ToolError("kind is required.");
-    if (kind === "clusters" && !ws.state.grouping.clusters) throw new ToolError("No clusters yet: call cluster_modules.");
-    if (kind === "ai" && !ws.state.grouping.ai) throw new ToolError("No architecture yet: call set_architecture.");
-    ws.setGrouping(kind);
-    const g = kind === "clusters" ? ws.state.grouping.clusters!.grouping : kind === "ai" ? ws.state.grouping.ai! : null;
-    return { summary: `Diagram grouped by ${kind === "ai" ? "your architecture" : kind}`, content: { showing: kind, mq: round(g ? g.mq : ws.state.grouping.folderMQ, 3) } };
   },
 
   list_files(ws, args) {

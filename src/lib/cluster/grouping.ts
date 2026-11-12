@@ -4,6 +4,7 @@
  */
 
 import type { DepGraph, Partition } from "@/lib/graph/types";
+import type { ModuleKind } from "@/lib/graph/kinds";
 import { clusterGraph, turboMQ } from "./mq";
 import { DEFAULT_SEARCH, placeIsolated, searchPartition, toPartition, type SearchOptions, type SearchStats } from "./search";
 
@@ -17,6 +18,8 @@ export interface Grouping {
   descriptions?: Record<string, string>;
   /** Architectural tier per module: 0 = entry points/UI at the top, higher = foundations. */
   tiers?: Record<string, number>;
+  /** What kind of part each module is (AI architecture); the map draws each kind as its own shape. */
+  kinds?: Record<string, ModuleKind>;
   mq: number;
 }
 
@@ -89,6 +92,7 @@ export interface ArchitectureModule {
   name: string;
   purpose: string;
   tier: number;
+  kind?: ModuleKind;
   files: string[];
 }
 
@@ -98,12 +102,14 @@ export function architectureGrouping(graph: DepGraph, modules: readonly Architec
   const labels: Record<string, string> = {};
   const descriptions: Record<string, string> = {};
   const tiers: Record<string, number> = {};
+  const kinds: Record<string, ModuleKind> = {};
   modules.forEach((m, i) => {
     const id = `ai-${i + 1}`;
     labels[id] = m.name;
     descriptions[id] = m.purpose;
     tiers[id] = m.tier;
+    if (m.kind) kinds[id] = m.kind;
     for (const f of m.files) partition[f] = id;
   });
-  return { kind: "ai", partition, labels, descriptions, tiers, mq: partitionMQ(graph, partition) };
+  return { kind: "ai", partition, labels, descriptions, tiers, kinds, mq: partitionMQ(graph, partition) };
 }

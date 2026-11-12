@@ -44,9 +44,12 @@ describe("buildView", () => {
     expect(nodes.find((n) => n.id === "f:ui/a.tsx")?.label).toBe("a.tsx");
     expect(nodes.find((n) => n.id === "m:data")?.god).toBe(true);
     const ids = edges.map((e) => e.id).sort();
-    expect(ids).toEqual(["f:ui/a.tsx->f:ui/b.tsx", "f:ui/a.tsx->m:data", "f:ui/b.tsx->m:data"]);
+    expect(ids).toEqual(["f:ui/a.tsx->f:ui/b.tsx", "f:ui/a.tsx->m:data", "f:ui/b.tsx->m:data", "m:ui->m:data"]);
+    // Opening ui keeps the part-level arrow; each file's own arrows across parts are details, drawn on focus.
+    expect(edges.find((e) => e.id === "m:ui->m:data")).toMatchObject({ weight: 3 });
+    expect(edges.find((e) => e.id === "m:ui->m:data")?.detail).toBeUndefined();
     // b imports db (value) and schema (type) -> merged edge is not type-only.
-    expect(edges.find((e) => e.id === "f:ui/b.tsx->m:data")).toMatchObject({ weight: 2, typeOnly: false });
+    expect(edges.find((e) => e.id === "f:ui/b.tsx->m:data")).toMatchObject({ weight: 2, typeOnly: false, minor: true, detail: true });
   });
 
   it("marks only edges between files of the same cycle", () => {
@@ -55,7 +58,9 @@ describe("buildView", () => {
       edges: [...graph.edges, { source: "data/db.ts", target: "ui/b.tsx", typeOnly: false }],
     };
     const { edges } = buildView(cyclic, partition, new Set(["ui", "data"]), [["data/db.ts", "ui/b.tsx"]], new Set());
-    const cycleEdges = edges.filter((e) => e.inCycle).map((e) => e.id).sort();
-    expect(cycleEdges).toEqual(["f:data/db.ts->f:ui/b.tsx", "f:ui/b.tsx->f:data/db.ts"]);
+    const cycleEdges = edges.filter((e) => e.inCycle && !e.detail).map((e) => e.id).sort();
+    expect(cycleEdges).toEqual(["m:data->m:ui", "m:ui->m:data"]);
+    const cycleDetails = edges.filter((e) => e.inCycle && e.detail).map((e) => e.id).sort();
+    expect(cycleDetails).toEqual(["f:data/db.ts->f:ui/b.tsx", "f:ui/b.tsx->f:data/db.ts"]);
   });
 });

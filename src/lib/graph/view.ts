@@ -1,10 +1,15 @@
+import { mainLinks } from "./organize";
 import { modulesOf } from "./partition";
+import type { ModuleKind } from "./kinds";
 import { importKey, type DepGraph, type Partition } from "./types";
 
 /**
  * What the diagram currently shows. Collapsed modules are single boxes; expanded
- * modules become a group box containing their files. File imports are re-routed to
- * whatever box currently represents each endpoint and merged into weighted edges.
+ * modules become a group box containing their files. Imports between two modules merge into
+ * one weighted module-level edge whether the modules are open or not (so opening a part keeps
+ * the map's arrows); imports between files of one open module are file-level edges, of which
+ * the ones told by a detour through other files (`mainLinks`) are `detail`; and a file's own
+ * imports across modules, when one end is open, are `detail` edges too.
  */
 export interface ViewNode {
   id: string;
@@ -25,6 +30,16 @@ export interface ViewNode {
   /** AI architecture: what the module is for, and its tier (0 = top of the diagram). */
   description?: string;
   tier?: number;
+  /** What kind of part the module is (lib/graph/kinds): its shape on the map. */
+  part?: ModuleKind;
+  /** On a shelf: a module most others use, drawn as a full-width bar under the map. */
+  shelf?: boolean;
+  /** The shelves this module uses, drawn as coloured markers instead of arrows. */
+  uses?: { label: string; color: number }[];
+  /** A shelf's users, as labels ("Used by pages and services"). */
+  usedBy?: string[];
+  /** A collapsed shelf's file names, to list on the bar. */
+  files?: string[];
 }
 
 export interface ViewEdge {
@@ -39,6 +54,18 @@ export interface ViewEdge {
   typeOnly: boolean;
   /** The file-level imports merged into this edge (`importKey`s). */
   members: string[];
+  /** Points at a shelf: drawn only when one of its ends is in focus. */
+  toShelf?: boolean;
+  /** Between the two modules of a loop pair: drawn as one two-way loop arrow. */
+  pair?: boolean;
+  /** Told by the map another way (lib/graph/organize `mainLinks`): drawn only when one of its ends is in focus. */
+  minor?: boolean;
+  /**
+   * Told another way inside an opened part: a file's own imports across modules (the module-level edge tells
+   * them), or an import between two of its files that a detour through its other files tells. Also `minor`;
+   * drawn only while one of its own two boxes is in focus (not just its part).
+   */
+  detail?: boolean;
 }
 
 export const PALETTE_SIZE = 8;
@@ -60,8 +87,24 @@ export function buildView(
   cycles: string[][],
   godFiles: ReadonlySet<string>,
   labels: Record<string, string> = {},
-  meta: { descriptions?: Record<string, string>; tiers?: Record<string, number> } = {},
+  meta: {
+    descriptions?: Record<string, string>;
+    tiers?: Record<string, number>;
+    kinds?: Record<string, ModuleKind>;
+    /** The organiser's decisions (lib/graph/organize). */
+    organization?: {
+      shelves: readonly string[];
+      pairs: readonly (readonly [string, string])[];
+      uses: ReadonlyMap<string, string[]>;
+      usedBy: ReadonlyMap<string, string[]>;
+      minor?: ReadonlySet<string>;
+    };
+  } = {},
 ): { nodes: ViewNode[]; edges: ViewEdge[] } {
+  const org = meta.organization;
+  const shelves = new Set(org?.shelves ?? []);
+  const pairKey = new Set((org?.pairs ?? []).flatMap(([a, b]) => [`${a}\0${b}`, `${b}\0${a}`]));
+  const label = (m: string) => labels[m] ?? m;
   const cycleOf = new Map<string, number>();
   cycles.forEach((cycle, i) => cycle.forEach((f) => cycleOf.set(f, i)));
   const locOf = new Map(graph.nodes.map((n) => [n.id, n.loc]));
@@ -80,6 +123,10 @@ export function buildView(
       inCycle: files.some((f) => cycleOf.has(f)),
       description: meta.descriptions?.[module],
       tier: meta.tiers?.[module],
+      part: meta.kinds?.[module],
+      ...(shelves.has(module)
+        ? { shelf: true, usedBy: (org?.usedBy.get(module) ?? []).map(label), files: files.map((f) => f.slice(f.lastIndexOf("/") + 1)) }
+        : { uses: (org?.uses.get(module) ?? []).map((s) => ({ label: label(s), color: colors.get(s) ?? 0 })) }),
     };
     if (!expanded.has(module)) {
       nodes.push({ id: moduleNodeId(module), kind: "module", ...base });
@@ -107,6 +154,7 @@ export function buildView(
         color: base.color,
         god: godFiles.has(file),
         inCycle: cycleOf.has(file),
+        ...(shelves.has(module) ? { shelf: true } : {}),
       });
     }
   }
@@ -115,10 +163,7 @@ export function buildView(
     expanded.has(partition[file]) ? fileNodeId(file) : moduleNodeId(partition[file]);
 
   const edges = new Map<string, ViewEdge>();
-  for (const e of graph.edges) {
-    const source = visibleId(e.source);
-    const target = visibleId(e.target);
-    if (source === target) continue; // import inside a collapsed module
+  const add = (source: string, target: string, e: DepGraph["edges"][number], flags: Partial<ViewEdge>) => {
     const inCycle = cycleOf.has(e.source) && cycleOf.get(e.source) === cycleOf.get(e.target);
     const id = `${source}->${target}`;
     const existing = edges.get(id);
@@ -129,9 +174,28 @@ export function buildView(
       existing.typeOnly &&= e.typeOnly;
       existing.members.push(member);
     } else {
-      edges.set(id, { id, source, target, weight: 1, inCycle, typeOnly: e.typeOnly, members: [member] });
+      edges.set(id, { id, source, target, weight: 1, inCycle, typeOnly: e.typeOnly, members: [member], ...flags });
     }
+  };
+  for (const e of graph.edges) {
+    const a = partition[e.source];
+    const b = partition[e.target];
+    if (a === b) {
+      if (expanded.has(a)) add(fileNodeId(e.source), fileNodeId(e.target), e, {});
+      continue; // otherwise: an import inside a closed module
+    }
+    add(moduleNodeId(a), moduleNodeId(b), e, {
+      ...(shelves.has(b) ? { toShelf: true } : {}),
+      ...(pairKey.has(`${a}\0${b}`) ? { pair: true } : {}),
+      ...(org?.minor?.has(`${a}\0${b}`) ? { minor: true } : {}),
+    });
+    if (expanded.has(a) || expanded.has(b)) add(visibleId(e.source), visibleId(e.target), e, { minor: true, detail: true });
   }
+
+  // Inside an opened part, an import the files already tell through each other waits for focus too.
+  const inside = [...edges.values()].filter((e) => !e.detail && e.source.startsWith("f:") && e.target.startsWith("f:"));
+  const told = mainLinks(inside);
+  for (const e of inside) if (told.has(`${e.source}\0${e.target}`)) Object.assign(e, { minor: true, detail: true });
 
   return { nodes, edges: [...edges.values()] };
 }

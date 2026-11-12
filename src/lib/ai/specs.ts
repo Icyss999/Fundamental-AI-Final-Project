@@ -48,12 +48,11 @@ export const TOOL_SPECS: ToolSpec[] = [
   ),
   tool(
     "cluster_modules",
-    "Rearranges the diagram by structure: runs the app's own clustering search (simulated annealing or hill climbing, maximising TurboMQ — a modularity score: cohesive modules, few imports between them) over the import graph and shows the clusters as the diagram's modules. Returns each cluster's files, the imports between clusters, and MQ against the folder grouping. Use it as the starting point for set_architecture.",
+    "Runs the app's own clustering search (simulated annealing or hill climbing, maximising TurboMQ — a modularity score: cohesive modules, few imports between them) over the import graph. Returns each cluster's files, the imports between clusters, and MQ against the folder grouping. The clusters are not drawn: the diagram shows only the architecture you design, so use them as the starting point for set_architecture.",
     {
       algorithm: { type: "string", enum: ["annealing", "hill_climbing"], description: "Default annealing." },
       start: { type: "string", enum: ["singletons", "folders"], description: "Initial partition: one cluster per file (default) or the folders." },
       seed: int("Random seed (default 42); another seed explores another run."),
-      show: { type: "boolean", description: "Show the clusters on the diagram (default true)." },
     },
   ),
   tool(
@@ -69,6 +68,12 @@ export const TOOL_SPECS: ToolSpec[] = [
             name: str("Short module name, e.g. \"Checkout\"."),
             purpose: str("One line: what the module is for."),
             tier: int("0 = top (entry points, UI)."),
+            kind: {
+              type: "string",
+              enum: ["ui", "entry", "logic", "data", "shared", "external", "config"],
+              description:
+                "What kind of part it is; the map draws each kind as its own shape. ui = what people see (pages, views, components); entry = where requests or the program come in (routes, API handlers, CLI); logic = services, features, state; data = storage and models; shared = small helpers most parts use; external = code talking to other systems; config = settings.",
+            },
             clusters: { type: "array", items: { type: "string" }, description: "Cluster ids from cluster_modules, e.g. cluster-2." },
             folders: { type: "array", items: { type: "string" }, description: "Folder modules (labels), e.g. components." },
             files: { type: "array", items: { type: "string" }, description: "Individual files (override clusters and folders)." },
@@ -80,14 +85,8 @@ export const TOOL_SPECS: ToolSpec[] = [
     ["modules"],
   ),
   tool(
-    "set_grouping",
-    "Switches the diagram's modules between the folders, the search's clusters, and your architecture.",
-    { kind: { type: "string", enum: ["folders", "clusters", "ai"] } },
-    ["kind"],
-  ),
-  tool(
     "show_in_diagram",
-    "Controls the diagram the user is looking at: switches to the Diagram tab, optionally changes mode, zooms to a file or module, and/or highlights a set of files (violet ring) — e.g. the files of a cycle, the top suspects, or the files a change touches. Pass highlight: [] to clear highlights.",
+    "Controls the diagram the user is looking at: optionally changes mode, zooms to a file or module, and/or highlights a set of files (cyan ring) — e.g. the files of a cycle, the top suspects, or the files a change touches. Pass highlight: [] to clear highlights.",
     {
       mode: MODE,
       focus: str("A file path or module label to zoom to."),

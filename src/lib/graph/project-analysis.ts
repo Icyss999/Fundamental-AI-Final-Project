@@ -8,6 +8,7 @@ import {
   moduleStats,
   type ModuleStat,
 } from "./insights";
+import { classifyModule, type ModuleKind } from "./kinds";
 import { autoFolderPartition, moduleGraph, modulesOf, type ModuleEdge } from "./partition";
 import type { DepGraph, FileRole, Partition } from "./types";
 
@@ -22,6 +23,8 @@ export interface ProjectAnalysis {
   /** AI architecture only: one line per module, and its tier (0 = top). */
   descriptions: Record<string, string>;
   tiers: Record<string, number>;
+  /** What kind of part each module is (the AI's word, else guessed from its name and files): its shape on the map. */
+  kinds: Record<string, ModuleKind>;
   /** Folder shared by every file, e.g. "src". */
   prefix: string;
   modules: Map<string, string[]>;
@@ -61,6 +64,8 @@ export function analyzeProject(full: DepGraph, name: string, includeAll: boolean
   const cycles = findCycles(graph);
   const godFiles = findGodFiles(graph);
   const stats = moduleStats(graph, modules, moduleEdges);
+  const kinds: Record<string, ModuleKind> = {};
+  for (const [m, files] of modules) kinds[m] = grouping?.kinds?.[m] ?? classifyModule(labels[m] ?? m, files);
   return {
     graph,
     partition,
@@ -68,6 +73,7 @@ export function analyzeProject(full: DepGraph, name: string, includeAll: boolean
     grouping: grouping?.kind ?? "folders",
     descriptions: grouping?.descriptions ?? {},
     tiers: grouping?.tiers ?? {},
+    kinds,
     prefix,
     modules,
     moduleEdges,

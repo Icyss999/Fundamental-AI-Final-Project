@@ -13,8 +13,8 @@ pnpm dev        # http://localhost:3000
 
 Paste a public GitHub repository URL (e.g. `https://github.com/pmndrs/zustand`, `owner/repo`, or a
 `…/tree/<branch>/<folder>` link) and press **Analyze**. The **Overview** tab explains what the project is and how its
-code is organised; the **Diagram** tab shows folders as modules — click one to open it, hover to trace imports, drag to
-rearrange. Set `GITHUB_TOKEN` in the environment to raise GitHub's API rate limit (60 requests/hour without it).
+code is organised; the **Diagram** tab shows folders as modules — click one to open it, hover to trace imports. Boxes are laid
+out automatically and can't be dragged. Set `GITHUB_TOKEN` in the environment to raise GitHub's API rate limit (60 requests/hour without it).
 Click **Built-in sample project** for a small app with planted problems, a recorded git history and a test report.
 
 The diagram has three modes (top right):

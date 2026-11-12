@@ -2,14 +2,10 @@ import { BaseEdge, getSmoothStepPath, useInternalNode, type Edge, type EdgeProps
 import type { Point } from "./layout";
 
 export type RoutedEdgeData = {
-  /** ELK's orthogonal route (absolute). */
+  /** The arrow's orthogonal route (absolute): ELK's, or `routeAround`'s for a minor connection. */
   points?: Point[];
-  /** Where ELK put the two endpoint nodes; if either has moved since, the route is stale. */
-  anchors?: { source: Point; target: Point };
 };
 export type RoutedEdgeType = Edge<RoutedEdgeData, "routed">;
-
-const near = (a: Point, b: Point) => Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5;
 
 /** SVG path through `points` with rounded corners, plus a label position halfway along it. */
 export function roundedPath(points: Point[], radius = 10): [string, number, number] {
@@ -44,35 +40,24 @@ export function roundedPath(points: Point[], radius = 10): [string, number, numb
 }
 
 /**
- * Draws ELK's orthogonal route while both endpoints are where ELK put them, so edges
- * go around boxes instead of through them. Once the user drags an endpoint the route
- * is stale, and the edge falls back to a smooth-step path between the handles.
+ * Draws the arrow's orthogonal route, so it goes around boxes instead of through them (boxes are never
+ * dragged, so the route stays right). Without one (no way around was found) it falls back to a
+ * smooth-step path between the handles.
  */
 export function RoutedEdge(props: EdgeProps<RoutedEdgeType>) {
-  const { source, target, data } = props;
-  const sourceNode = useInternalNode(source);
-  const targetNode = useInternalNode(target);
-
-  const fresh =
-    data?.points &&
-    data.points.length >= 2 &&
-    data.anchors &&
-    sourceNode &&
-    targetNode &&
-    near(sourceNode.internals.positionAbsolute, data.anchors.source) &&
-    near(targetNode.internals.positionAbsolute, data.anchors.target);
-
-  const [path, labelX, labelY] = fresh
-    ? roundedPath(data.points!)
-    : getSmoothStepPath({
-        sourceX: props.sourceX,
-        sourceY: props.sourceY,
-        sourcePosition: props.sourcePosition,
-        targetX: props.targetX,
-        targetY: props.targetY,
-        targetPosition: props.targetPosition,
-        borderRadius: 10,
-      });
+  const points = props.data?.points;
+  const [path, labelX, labelY] =
+    points && points.length >= 2
+      ? roundedPath(points)
+      : getSmoothStepPath({
+          sourceX: props.sourceX,
+          sourceY: props.sourceY,
+          sourcePosition: props.sourcePosition,
+          targetX: props.targetX,
+          targetY: props.targetY,
+          targetPosition: props.targetPosition,
+          borderRadius: 10,
+        });
 
   return (
     <BaseEdge
@@ -93,4 +78,59 @@ export function RoutedEdge(props: EdgeProps<RoutedEdgeType>) {
   );
 }
 
-export const edgeTypes = { routed: RoutedEdge };
+export type LoopEdgeType = Edge<Record<string, never>, "loop">;
+
+/**
+ * Two parts that import each other sit side by side; this draws the one two-way arrow between their
+ * facing sides (or top and bottom, should they ever be stacked), labelled "loop".
+ */
+export function LoopEdge(props: EdgeProps<LoopEdgeType>) {
+  const s = useInternalNode(props.source);
+  const t = useInternalNode(props.target);
+  if (!s || !t) return null;
+  const box = (n: NonNullable<typeof s>) => ({
+    x: n.internals.positionAbsolute.x,
+    y: n.internals.positionAbsolute.y,
+    w: n.measured?.width ?? n.width ?? 0,
+    h: n.measured?.height ?? n.height ?? 0,
+  });
+  const a = box(s);
+  const b = box(t);
+  const ac = { x: a.x + a.w / 2, y: a.y + a.h / 2 };
+  const bc = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+  let p1: Point;
+  let p2: Point;
+  if (Math.abs(ac.x - bc.x) >= Math.abs(ac.y - bc.y)) {
+    const [l, r] = ac.x <= bc.x ? [a, b] : [b, a];
+    const top = Math.max(l.y, r.y);
+    const bottom = Math.min(l.y + l.h, r.y + r.h);
+    const y = bottom > top ? Math.min(top + 30, (top + bottom) / 2) : (l.y + l.h / 2 + r.y + r.h / 2) / 2;
+    p1 = { x: l.x + l.w + 3, y };
+    p2 = { x: r.x - 3, y };
+  } else {
+    const [u, d] = ac.y <= bc.y ? [a, b] : [b, a];
+    const x = (Math.max(u.x, d.x) + Math.min(u.x + u.w, d.x + d.w)) / 2 || (ac.x + bc.x) / 2;
+    p1 = { x, y: u.y + u.h + 3 };
+    p2 = { x, y: d.y - 3 };
+  }
+  return (
+    <BaseEdge
+      id={props.id}
+      path={`M ${p1.x},${p1.y} L ${p2.x},${p2.y}`}
+      markerStart={props.markerStart}
+      markerEnd={props.markerEnd}
+      style={props.style}
+      label={props.label}
+      labelX={(p1.x + p2.x) / 2}
+      labelY={(p1.y + p2.y) / 2 - 14}
+      labelStyle={props.labelStyle}
+      labelShowBg={props.labelShowBg}
+      labelBgStyle={props.labelBgStyle}
+      labelBgPadding={props.labelBgPadding}
+      labelBgBorderRadius={props.labelBgBorderRadius}
+      interactionWidth={14}
+    />
+  );
+}
+
+export const edgeTypes = { routed: RoutedEdge, loop: LoopEdge };

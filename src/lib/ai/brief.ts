@@ -64,12 +64,12 @@ const MODE_LABEL = { structure: "Structure (Layer 1)", risk: "Bug risk (Layer 2)
 export function appState(s: WorkspaceSnapshot, highlighted: number): string {
   const v = s.view;
   const d = s.diagnosis;
-  const lines = [`Tab: ${v.tab === "diagram" ? `Diagram, mode ${MODE_LABEL[v.mode]}` : "Overview"}`];
+  const lines = [`Mode: ${MODE_LABEL[v.mode]}`];
   if (v.selection) lines.push(`Selected ${v.selection.type}: ${v.selection.type === "module" ? (s.diagram.labels[v.selection.id] ?? v.selection.id) : v.selection.id}`);
   if (highlighted > 0) lines.push(`Files you highlighted: ${highlighted}`);
   const g = s.grouping;
   const ai = g.ai ? Object.keys(g.ai.labels).length : 0;
-  lines.push(`Diagram modules: ${g.kind === "ai" ? `your architecture (${ai} modules)` : g.kind === "clusters" ? "clusters from the MQ search" : "folders"}${g.ai && g.kind !== "ai" ? `; your architecture (${ai} modules) is available` : ""}`);
+  lines.push(`Diagram modules: ${g.ai ? `your architecture (${ai} modules)` : "folders (until you design an architecture)"}`);
   if (s.review) lines.push(`Your code review: ${s.review.findings.length} findings, ${s.review.reviewed.length} files reviewed${s.useReview ? " (counted as evidence)" : " (not counted)"}`);
   lines.push(d.tests.length ? `Test outcomes: ${d.failing} failing, ${d.passing} passing, ${d.tests.length - d.failing - d.passing} unknown` : "Test outcomes: the project has no test files");
   const rules = s.policy.errors.length

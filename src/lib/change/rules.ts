@@ -328,7 +328,7 @@ export function suggestRules(modules: readonly { label: string }[], moduleEdges:
   }
   const used = tiers.filter((t) => t.length > 0);
 
-  const lines = ["# Architecture rules — edit freely. One rule per line; paths are folders or files."];
+  const lines = ["# Architecture rules, one per line; paths are folders or files."];
   if (used.length >= 2) {
     lines.push("# Each layer may import itself and the layers below it, never the ones above.");
     lines.push(`layers: ${used.map((t) => t.join(", ")).join(" > ")}`);

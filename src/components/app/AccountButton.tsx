@@ -37,11 +37,11 @@ export function AccountButton({
   if (session.status === "loading") return <div className="h-9 w-9 shrink-0 animate-pulse rounded-full bg-[var(--hover)]" />;
 
   const { user } = session;
-  const button = compact ? "h-9 px-3 text-[13px]" : "h-10 px-4 text-[14px]";
+  const button = compact ? "k-btn-small" : "";
 
   if (!user) {
     const signIn = (
-      <span className={`inline-flex shrink-0 items-center gap-2 rounded-xl bg-[#1f2328] font-medium text-white transition hover:bg-[#32383f] dark:bg-white dark:text-[#1f2328] dark:hover:bg-[#e6e6e6] ${button}`}>
+      <span className={`k-btn shrink-0 ${button}`}>
         <Icon.GitHub className="h-4 w-4" />
         Sign in{compact ? "" : " with GitHub"}
       </span>
@@ -60,8 +60,8 @@ export function AccountButton({
           {signIn}
         </button>
         {open && (
-          <div className="absolute right-0 top-full z-50 mt-2 w-80 rounded-xl border border-[var(--border)] bg-[var(--panel)] p-4 text-[13px] leading-relaxed shadow-lg">
-            <p className="font-semibold">GitHub sign-in isn&apos;t set up yet</p>
+          <div className="k-fade absolute right-0 top-full z-50 mt-2.5 w-80 rounded-xl border-[2.5px] border-[var(--ink)] bg-[var(--panel)] p-4 text-[14px] leading-relaxed shadow-[4px_4px_0_var(--ink)]">
+            <p className="font-letter text-[17px] font-extrabold">GitHub sign-in isn&apos;t set up yet</p>
             <ol className="mt-2 list-decimal space-y-1 pl-4 text-[var(--muted)]">
               <li>
                 Create an OAuth App at <span className="font-mono text-[12px]">github.com/settings/developers</span> with callback URL{" "}
@@ -73,7 +73,7 @@ export function AccountButton({
               </li>
               <li>Restart the dev server.</li>
             </ol>
-            <p className="mt-2 text-[12px] text-[var(--muted)]">Public repositories work without signing in.</p>
+            <p className="mt-2 text-[13px] text-[var(--muted)]">Public repositories work without signing in.</p>
           </div>
         )}
       </div>
@@ -85,7 +85,7 @@ export function AccountButton({
       <button
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel)] py-1 pl-1 pr-2.5 text-[13px] font-medium hover:bg-[var(--hover)]"
+        className="flex items-center gap-2 rounded-full border-2 border-[var(--ink)] bg-[var(--panel)] py-0.5 pl-0.5 pr-2.5 text-[14px] font-bold hover:bg-[var(--hover)]"
         title={`Signed in as ${user.login}`}
       >
         {user.avatarUrl ? (
@@ -101,10 +101,10 @@ export function AccountButton({
         </svg>
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-60 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)] text-[13px] shadow-lg" role="menu">
-          <div className="border-b border-[var(--border)] px-4 py-3">
-            <p className="font-semibold">{user.name ?? user.login}</p>
-            <p className="text-[12px] text-[var(--muted)]">@{user.login} · connected to GitHub</p>
+        <div className="k-fade absolute right-0 top-full z-50 mt-2.5 w-64 overflow-hidden rounded-xl border-[2.5px] border-[var(--ink)] bg-[var(--panel)] text-[14px] shadow-[4px_4px_0_var(--ink)]" role="menu">
+          <div className="border-b-2 border-dashed border-[var(--border)] px-4 py-3">
+            <p className="font-bold">{user.name ?? user.login}</p>
+            <p className="text-[13px] text-[var(--muted)]">@{user.login} · connected to GitHub</p>
           </div>
           {onChooseRepo && (
             <button role="menuitem" onClick={() => { setOpen(false); onChooseRepo(); }} className="block w-full px-4 py-2.5 text-left hover:bg-[var(--hover)]">
@@ -115,7 +115,7 @@ export function AccountButton({
             Your GitHub profile
             <Icon.External className="h-3.5 w-3.5 text-[var(--muted)]" />
           </a>
-          <button role="menuitem" onClick={() => { setOpen(false); onSignOut(); }} className="block w-full border-t border-[var(--border)] px-4 py-2.5 text-left text-[var(--danger)] hover:bg-[var(--hover)]">
+          <button role="menuitem" onClick={() => { setOpen(false); onSignOut(); }} className="block w-full border-t-2 border-dashed border-[var(--border)] px-4 py-2.5 text-left font-bold text-[var(--danger)] hover:bg-[var(--hover)]">
             Sign out
           </button>
         </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { SidePanel } from "@/components/app/SidePanel";
 import { Icon, Spinner } from "@/components/app/ui";
 import { AUTOPILOT_STAGES } from "@/lib/ai/autopilot";
 import { describeCall } from "@/lib/ai/execute";
@@ -11,7 +12,9 @@ import type { Autopilot, StageStatus } from "./useAutopilot";
 
 export type StatusState = AssistantStatus | "loading" | "error";
 
-/** The chat docked beside both tabs. The conversation lives in useAssistant (kept while closed). */
+const STAGE_SHORT: Record<string, string> = { organize: "Sort", bugs: "Bugs", refactor: "Tidy-up" };
+
+/** The chat, as the one side panel. The conversation lives in useAssistant, so it survives closing. */
 export function AssistantPanel({
   assistant,
   status,
@@ -21,14 +24,9 @@ export function AssistantPanel({
   onNewChat,
   onClose,
   autopilot,
-  autoRun,
-  onAutoRunChange,
 }: {
   assistant: Assistant;
   autopilot: Autopilot;
-  /** Run the autopilot whenever a project loads. */
-  autoRun: boolean;
-  onAutoRunChange: (value: boolean) => void;
   status: StatusState;
   suggestions: string[];
   /** A diagram target for inline code in replies (a file path or module label), if it names one. */
@@ -40,14 +38,20 @@ export function AssistantPanel({
   const { messages, busy } = assistant;
   const [draft, setDraft] = useState("");
   const scroller = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
   const stick = useRef(true);
   const ready = typeof status === "object" && status.configured;
 
   // Follow the reply as it streams, unless the user scrolled up to read.
   useEffect(() => {
     const el = scroller.current;
-    if (el && stick.current) el.scrollTop = el.scrollHeight;
+    if (el && stick.current && messages.length > 0) el.scrollTop = el.scrollHeight;
   }, [messages]);
+
+  // Ready to type as soon as the panel opens.
+  useEffect(() => {
+    if (ready) input.current?.focus({ preventScroll: true });
+  }, [ready]);
 
   const submit = (text: string) => {
     if (!ready || busy || !text.trim()) return;
@@ -59,43 +63,24 @@ export function AssistantPanel({
   const results = new Map(messages.filter((m): m is ToolMessage => m.role === "tool").map((m) => [m.toolCallId, m]));
 
   return (
-    <aside className="flex w-[400px] shrink-0 flex-col border-l border-[var(--border)] bg-[var(--panel)]" aria-label="AI assistant">
-      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-[var(--border)] px-4">
-        <Icon.Sparkle className="h-4 w-4 shrink-0 text-[var(--ai)]" />
-        <span className="shrink-0 whitespace-nowrap text-[12px] font-semibold uppercase tracking-wider text-[var(--muted)]">AI</span>
-        {typeof status === "object" && status.configured && (
-          <span className="min-w-0 truncate rounded-full bg-[var(--hover)] px-2 py-px font-mono text-[10.5px] text-[var(--muted)]" title="DeepSeek model (DEEPSEEK_MODEL)">
-            {status.model}
-          </span>
-        )}
-        <span className="ml-auto flex shrink-0 items-center gap-1 whitespace-nowrap">
-          {ready && !busy && (
-            <button
-              onClick={() => void autopilot.start()}
-              className="inline-flex items-center gap-1 rounded-md bg-[var(--ai-soft)] px-2 py-0.5 text-[11.5px] font-medium text-[var(--ai)] hover:brightness-95 dark:hover:brightness-125"
-              title="Let the AI rearrange the diagram, review the code for bugs and plan the refactoring"
-            >
-              <Icon.Sparkle className="h-3 w-3" />
-              Autopilot
-            </button>
-          )}
-          {messages.length > 0 && (
-            <button onClick={onNewChat} className="rounded-md px-2 py-0.5 text-[11.5px] font-medium text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--foreground)]" title="Start a new conversation">
-              New chat
-            </button>
-          )}
-          <button onClick={onClose} className="rounded-md p-1 text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--foreground)]" title="Close the assistant">
-            <Icon.Close className="h-3.5 w-3.5" />
+    <SidePanel
+      title="Ask Kosmos"
+      wide
+      onClose={onClose}
+      actions={
+        messages.length > 0 && (
+          <button onClick={onNewChat} className="k-btn k-btn-small" title="Start a new conversation">
+            New chat
           </button>
-        </span>
-      </div>
-
+        )
+      }
+    >
       {autopilot.stages && (
-        <div className="flex shrink-0 items-center gap-1 border-b border-[var(--border)] px-3 py-1.5" aria-label="Autopilot progress">
-          {AUTOPILOT_STAGES.map((stage, i) => (
-            <StageChip key={stage.id} n={i + 1} title={stage.title} status={autopilot.stages![stage.id]} />
+        <ol className="flex shrink-0 gap-1.5 border-b-2 border-dashed border-[var(--border)] px-4 py-2" aria-label="Full pass progress">
+          {AUTOPILOT_STAGES.filter((stage) => autopilot.stages![stage.id]).map((stage, i) => (
+            <StageChip key={stage.id} n={i + 1} title={STAGE_SHORT[stage.id] ?? stage.title} status={autopilot.stages![stage.id]!} />
           ))}
-        </div>
+        </ol>
       )}
 
       <div
@@ -104,22 +89,23 @@ export function AssistantPanel({
           const el = e.currentTarget;
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
         }}
-        className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
+        className="min-h-0 flex-1 overflow-y-auto px-5 py-4"
+        aria-live="polite"
       >
         {messages.length === 0 ? (
-          <Intro status={status} suggestions={suggestions} onPick={submit} onAutopilot={() => void autopilot.start()} autoRun={autoRun} onAutoRunChange={onAutoRunChange} />
+          <Intro status={status} suggestions={suggestions} onPick={submit} />
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-5">
             {messages.map((m) =>
               m.role === "user" && m.stage ? (
-                <div key={m.id} className="flex items-center gap-2 pt-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--ai)]">
-                  <span className="h-px flex-1 bg-[var(--ai-soft)]" />
-                  <Icon.Sparkle className="h-3 w-3" />
-                  {m.text}
-                  <span className="h-px flex-1 bg-[var(--ai-soft)]" />
-                </div>
+                <p key={m.id} className="font-letter w-fit rounded-[4px] border-2 border-[var(--on-yel)] bg-[var(--yel)] px-2.5 py-0.5 text-[14px] font-extrabold text-[var(--on-yel)]">
+                  {m.text.replace(/^Autopilot · /, "Full pass · ")}
+                </p>
               ) : m.role === "user" ? (
-                <div key={m.id} className="ml-10 whitespace-pre-wrap rounded-2xl rounded-br-md bg-[var(--accent-soft)] px-3 py-2 text-[13px] leading-relaxed [overflow-wrap:anywhere]">
+                <div
+                  key={m.id}
+                  className="ml-10 whitespace-pre-wrap rounded-2xl rounded-br-[4px] border-2 border-[var(--ink)] bg-[var(--yel-soft)] px-3.5 py-2.5 text-[15px] leading-[1.5] [overflow-wrap:anywhere]"
+                >
                   {m.text}
                 </div>
               ) : m.role === "assistant" ? (
@@ -130,9 +116,10 @@ export function AssistantPanel({
         )}
       </div>
 
-      <div className="shrink-0 border-t border-[var(--border)] p-3">
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--canvas)] focus-within:border-[var(--ai)]">
+      <div className="shrink-0 border-t-2 border-[var(--ink)] p-3">
+        <div className="rounded-xl border-2 border-[var(--ink)] bg-[var(--canvas)] focus-within:shadow-[3px_3px_0_var(--cyan)]">
           <textarea
+            ref={input}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
@@ -143,92 +130,75 @@ export function AssistantPanel({
             }}
             disabled={!ready}
             rows={Math.min(8, Math.max(2, draft.split("\n").length))}
-            placeholder={ready ? "Ask about the architecture, a bug, or a refactoring…" : "The assistant is not set up yet"}
-            className="block w-full resize-none bg-transparent px-3 pt-2.5 text-[13px] leading-relaxed outline-none placeholder:text-[var(--muted)] disabled:cursor-not-allowed"
-            aria-label="Message the assistant"
+            placeholder={ready ? "Ask about a file, a bug, or how it all fits…" : "The AI isn't set up yet"}
+            className="block w-full resize-none bg-transparent px-3.5 pt-3 text-[15px] leading-[1.5] outline-none placeholder:text-[var(--muted)] focus-visible:outline-none disabled:cursor-not-allowed"
+            aria-label="Message Kosmos"
           />
-          <div className="flex items-center justify-between gap-2 px-2 pb-2">
-            <label className="flex cursor-pointer items-center gap-1.5 rounded-md px-1 text-[11.5px] text-[var(--muted)]" title="More reasoning per step: slower, better at reading code and finding bugs">
-              <input type="checkbox" checked={assistant.effort === "high"} onChange={(e) => assistant.setEffort(e.target.checked ? "high" : "low")} className="accent-[var(--ai)]" />
+          <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5">
+            <label className="flex cursor-pointer items-center gap-2 px-1 text-[13.5px] text-[var(--muted)]" title="Slower, but better at reading code and finding bugs">
+              <input type="checkbox" checked={assistant.effort === "high"} onChange={(e) => assistant.setEffort(e.target.checked ? "high" : "low")} className="h-4 w-4 accent-[var(--ink)]" />
               Think harder
             </label>
             {busy ? (
-              <button onClick={assistant.stop} className="grid h-7 w-7 place-items-center rounded-lg bg-[var(--foreground)] text-[var(--background)]" title="Stop">
+              <button onClick={assistant.stop} className="k-btn k-btn-primary !h-9 !w-9 !p-0" title="Stop" aria-label="Stop">
                 <Icon.Stop className="h-3.5 w-3.5" />
               </button>
             ) : (
-              <button
-                onClick={() => submit(draft)}
-                disabled={!ready || !draft.trim()}
-                className="grid h-7 w-7 place-items-center rounded-lg bg-[var(--ai)] text-white disabled:opacity-35"
-                title="Send (Enter)"
-              >
+              <button onClick={() => submit(draft)} disabled={!ready || !draft.trim()} className="k-btn k-btn-primary !h-9 !w-9 !p-0" title="Send (Enter)" aria-label="Send">
                 <Icon.Send className="h-4 w-4" />
               </button>
             )}
           </div>
         </div>
       </div>
-    </aside>
+    </SidePanel>
   );
 }
 
 function StageChip({ n, title, status }: { n: number; title: string; status: StageStatus }) {
   const icon =
     status === "running" ? (
-      <Spinner className="h-3 w-3 text-[var(--ai)]" />
+      <Spinner className="h-3.5 w-3.5" />
     ) : status === "done" ? (
-      <Icon.Check className="h-3 w-3 text-[var(--added)]" />
-    ) : status === "pending" ? (
-      <span className="grid h-3.5 w-3.5 place-items-center rounded-full border border-[var(--border)] text-[9px] text-[var(--muted)]">{n}</span>
+      <Icon.Check className="h-3.5 w-3.5 text-[var(--added)]" />
+    ) : status === "pending" || status === "skipped" ? (
+      <span className="text-[12px] font-bold tabular-nums">{n}</span>
     ) : (
-      <Icon.Alert className="h-3 w-3 text-[var(--warn)]" />
+      <Icon.Alert className="h-3.5 w-3.5 text-[var(--warn)]" />
     );
+  const label = { running: "working", done: "done", pending: "waiting", stopped: "stopped", error: "failed", skipped: "not started" }[status];
   return (
-    <span
-      className={`inline-flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-[11.5px] ${status === "running" ? "bg-[var(--ai-soft)] font-medium text-[var(--ai)]" : status === "pending" ? "text-[var(--muted)]" : ""}`}
-      title={`${title}: ${status}`}
+    <li
+      className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-md border-2 px-2 py-1 text-[13.5px] ${status === "running" ? "border-[var(--ink)] bg-[var(--yel-soft)] font-bold" : status === "pending" || status === "skipped" ? "border-[var(--border)] text-[var(--muted)]" : "border-[var(--border)]"}`}
+      title={`${title}: ${label}`}
     >
       {icon}
       <span className="truncate">{title}</span>
-    </span>
+      <span className="sr-only">: {label}</span>
+    </li>
   );
 }
 
-function Intro({
-  status,
-  suggestions,
-  onPick,
-  onAutopilot,
-  autoRun,
-  onAutoRunChange,
-}: {
-  status: StatusState;
-  suggestions: string[];
-  onPick: (text: string) => void;
-  onAutopilot: () => void;
-  autoRun: boolean;
-  onAutoRunChange: (value: boolean) => void;
-}) {
+function Intro({ status, suggestions, onPick }: { status: StatusState; suggestions: string[]; onPick: (text: string) => void }) {
   if (status === "loading") {
     return (
-      <div className="flex items-center gap-2 text-[13px] text-[var(--muted)]">
-        <Spinner className="h-3.5 w-3.5" /> Connecting…
-      </div>
+      <p className="flex items-center gap-2 text-[15px] text-[var(--muted)]">
+        <Spinner className="h-4 w-4" /> Connecting…
+      </p>
     );
   }
   if (status === "error" || !status.configured) {
     return (
-      <div className="space-y-2 text-[13px] leading-relaxed text-[var(--muted)]">
-        <p className="font-medium text-[var(--foreground)]">Set up the assistant</p>
+      <div className="space-y-2 text-[15px] leading-relaxed">
+        <p className="font-letter text-[19px] font-extrabold">The AI needs a key first.</p>
         {status === "error" ? (
-          <p>The server could not be reached. Is the app running?</p>
+          <p className="text-[var(--muted)]">Kosmos couldn&apos;t reach its server. Is the app still running?</p>
         ) : (
           <>
-            <p>
-              Add your DeepSeek API key to <code className="rounded bg-[var(--hover)] px-1 font-mono text-[12px]">.env.local</code> and restart the server:
+            <p className="text-[var(--muted)]">
+              Add a DeepSeek API key to <code className="font-mono text-[14px]">.env.local</code> and restart the server. Everything else in Kosmos works without it.
             </p>
-            <pre className="rounded-lg bg-[var(--hover)] px-3 py-2 font-mono text-[11.5px] text-[var(--foreground)]">DEEPSEEK_API_KEY=sk-…</pre>
+            <pre className="rounded-lg border-2 border-[var(--ink)] px-3 py-2 font-mono text-[13px]">DEEPSEEK_API_KEY=sk-…</pre>
           </>
         )}
       </div>
@@ -236,41 +206,20 @@ function Intro({
   }
   return (
     <div>
-      <section className="mb-4 rounded-xl border border-[var(--ai)]/30 bg-[var(--ai-soft)] p-3">
-        <p className="flex items-center gap-1.5 text-[13px] font-semibold text-[var(--ai)]">
-          <Icon.Sparkle className="h-3.5 w-3.5" /> Autopilot
-        </p>
-        <ol className="mt-1.5 space-y-0.5 text-[12px] leading-relaxed text-[var(--foreground)]">
-          <li>1 · Rearrange the diagram into the project&apos;s real architecture (MQ clustering + named modules)</li>
-          <li>2 · Review the riskiest code for bugs and feed the findings into the Bayesian ranking</li>
-          <li>3 · Write architecture rules, plan the refactoring with A*, and draft a patch per step</li>
-        </ol>
-        <div className="mt-2.5 flex items-center justify-between gap-2">
-          <label className="flex cursor-pointer items-center gap-1.5 text-[11.5px] text-[var(--muted)]">
-            <input type="checkbox" checked={autoRun} onChange={(e) => onAutoRunChange(e.target.checked)} className="accent-[var(--ai)]" />
-            Run when a project loads
-          </label>
-          <button onClick={onAutopilot} className="rounded-lg bg-[var(--ai)] px-3 py-1 text-[12.5px] font-medium text-white hover:brightness-110">
-            Run autopilot
-          </button>
-        </div>
-      </section>
-      <p className="text-[13px] leading-relaxed text-[var(--muted)]">
-        Or ask me anything. I can explore the <strong className="font-medium text-[var(--foreground)]">diagram</strong>, find where a <strong className="font-medium text-[var(--foreground)]">bug</strong> most likely is, and plan and write a{" "}
-        <strong className="font-medium text-[var(--foreground)]">refactoring</strong>. I run the app&apos;s own algorithms (Bayesian ranking, the rule engine, A* search), read the code, and point at what I find in the diagram.
+      <p className="font-letter text-[21px] font-extrabold leading-tight">What would you like to know?</p>
+      <p className="mt-1.5 text-[15px] leading-relaxed text-[var(--muted)]">
+        Ask in your own words. Kosmos reads the code, runs its own checks, and points at what it finds on the map.
       </p>
-      <div className="mt-4 space-y-1.5">
+      <ul className="mt-4 space-y-2">
         {suggestions.map((s) => (
-          <button
-            key={s}
-            onClick={() => onPick(s)}
-            className="flex w-full items-start gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-left text-[12.5px] leading-snug hover:border-[var(--ai)] hover:bg-[var(--ai-soft)]"
-          >
-            <Icon.Sparkle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--ai)]" />
-            {s.replace(/`/g, "")}
-          </button>
+          <li key={s}>
+            <button onClick={() => onPick(s)} className="w-full rounded-xl border-2 border-[var(--ink)] px-3.5 py-2.5 text-left text-[14.5px] leading-snug hover:bg-[var(--yel-soft)]">
+              {s.replace(/`/g, "")}
+            </button>
+          </li>
         ))}
-      </div>
+      </ul>
+
     </div>
   );
 }
@@ -290,14 +239,14 @@ function AssistantReply({
 }) {
   const thinking = m.streaming && !m.content;
   return (
-    <div className="space-y-2">
+    <div className="space-y-2.5">
       {(m.reasoning || thinking) && (
-        <details className="group text-[12px]">
-          <summary className="flex cursor-pointer select-none list-none items-center gap-1.5 text-[var(--muted)] hover:text-[var(--foreground)]">
-            {thinking ? <Spinner className="h-3 w-3" /> : <span className="text-[9px] transition-transform group-open:rotate-90">▶</span>}
-            {thinking ? "Thinking…" : "Thought process"}
+        <details className="group text-[14px]">
+          <summary className="flex cursor-pointer select-none list-none items-center gap-1.5 font-bold text-[var(--muted)] hover:text-[var(--foreground)]">
+            {thinking ? <Spinner className="h-3.5 w-3.5" /> : <span className="text-[10px] transition-transform group-open:rotate-90">▶</span>}
+            {thinking ? "Thinking…" : "How it thought"}
           </summary>
-          {m.reasoning && <p className="mt-1.5 max-h-60 overflow-y-auto whitespace-pre-wrap border-l-2 border-[var(--border)] pl-3 text-[11.5px] leading-relaxed text-[var(--muted)]">{m.reasoning}</p>}
+          {m.reasoning && <p className="mt-1.5 max-h-60 overflow-y-auto whitespace-pre-wrap border-l-2 border-[var(--border)] pl-3 text-[13.5px] leading-relaxed text-[var(--muted)]">{m.reasoning}</p>}
         </details>
       )}
       {m.toolCalls.length > 0 && (
@@ -308,10 +257,10 @@ function AssistantReply({
         </ul>
       )}
       {m.content && <Markdown text={m.content} resolve={resolve} onTarget={onTarget} />}
-      {m.stopped && <p className="text-[11.5px] text-[var(--muted)]">Stopped.</p>}
+      {m.stopped && <p className="text-[13.5px] text-[var(--muted)]">Stopped.</p>}
       {m.error && (
-        <p className="flex items-start gap-1.5 rounded-lg bg-[var(--danger-soft)] px-2.5 py-1.5 text-[12px] text-[var(--danger)]">
-          <Icon.Alert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <p className="flex items-start gap-1.5 rounded-lg border-2 border-[var(--danger)] px-2.5 py-1.5 text-[14px] text-[var(--danger)]">
+          <Icon.Alert className="mt-0.5 h-4 w-4 shrink-0" />
           {m.error}
         </p>
       )}
@@ -322,24 +271,24 @@ function AssistantReply({
 function ToolRow({ name, args, result, pending }: { name: string; args: string; result?: ToolMessage; pending: boolean }) {
   const [open, setOpen] = useState(false);
   const running = !result && pending;
-  const label = result ? result.summary : running ? `${describeCall(name, args)}…` : `${describeCall(name, args)} — cancelled`;
+  const label = result ? result.summary : running ? `${describeCall(name, args)}…` : `${describeCall(name, args)} (cancelled)`;
   return (
-    <li className="rounded-lg border border-[var(--border)] text-[12px]">
-      <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left" title={name}>
+    <li className="rounded-lg border-2 border-[var(--border)] text-[13.5px]">
+      <button onClick={() => setOpen((v) => !v)} aria-expanded={open} className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left" title={`${name}: show the details`}>
         {running ? (
-          <Spinner className="h-3 w-3 shrink-0 text-[var(--ai)]" />
+          <Spinner className="h-3.5 w-3.5 shrink-0" />
         ) : result?.ok ? (
-          <Icon.Check className="h-3 w-3 shrink-0 text-[var(--added)]" />
+          <Icon.Check className="h-3.5 w-3.5 shrink-0 text-[var(--added)]" />
         ) : (
-          <Icon.Alert className="h-3 w-3 shrink-0 text-[var(--warn)]" />
+          <Icon.Alert className="h-3.5 w-3.5 shrink-0 text-[var(--warn)]" />
         )}
         <span className="min-w-0 flex-1 truncate">{label}</span>
-        <span className="shrink-0 font-mono text-[10px] text-[var(--muted)]">{name}</span>
       </button>
       {open && (
-        <div className="space-y-1.5 border-t border-[var(--border)] px-2.5 py-2">
-          <ToolData label="Arguments" text={pretty(args)} />
-          {result && <ToolData label="Result" text={pretty(result.content)} />}
+        <div className="space-y-1.5 border-t-2 border-[var(--border)] px-2.5 py-2">
+          <p className="font-mono text-[12px] text-[var(--muted)]">{name}</p>
+          <ToolData label="Asked with" text={pretty(args)} />
+          {result && <ToolData label="Got back" text={pretty(result.content)} />}
         </div>
       )}
     </li>
@@ -350,8 +299,8 @@ function ToolData({ label, text }: { label: string; text: string }) {
   const shown = text.length > 4000 ? `${text.slice(0, 4000)}\n…` : text;
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">{label}</p>
-      <pre className="mt-0.5 max-h-56 overflow-auto whitespace-pre-wrap break-all rounded-md bg-[var(--hover)] px-2 py-1.5 font-mono text-[10.5px] leading-relaxed">{shown}</pre>
+      <p className="text-[12.5px] font-bold text-[var(--muted)]">{label}</p>
+      <pre className="mt-0.5 max-h-56 overflow-auto whitespace-pre-wrap break-all rounded-md bg-[var(--hover)] px-2 py-1.5 font-mono text-[12px] leading-relaxed">{shown}</pre>
     </div>
   );
 }

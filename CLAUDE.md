@@ -1,4 +1,4 @@
-# Codebase Architecture Mapper
+# Kosmos (Codebase Architecture Mapper)
 
 Fundamentals of AI course project. Turns a codebase in any common language (JS/TS, Python, Java/Kotlin/Scala/Groovy,
 Go, Rust, C/C++/Objective-C, C#, PHP, Ruby, Swift, Dart, Vue/Svelte/Astro, Lua, Elixir, Erlang, Haskell, Elm,
@@ -35,24 +35,47 @@ Stretch: CreateService / ExtractFunction actions, LLM executes one approved step
 
 ## User flow
 
-Optionally **Sign in with GitHub** (pick from your own repos, private included). Paste a GitHub URL (or `owner/repo`,
-or `…/tree/<branch>/<folder>`) → the server shallow-clones it and streams progress →
-**Overview** tab (what the project is, stack, languages, modules, entry points, core files, health, bug-risk hotspots,
-architecture check) and **Diagram** tab (folder modules you can open, hover, drag). Tests, examples, stories and config
-are hidden unless toggled on. The diagram has three modes (top right): **Structure** (Layer 1), **Bug risk** (Layer 2:
-heat per box, ranked list, "why suspected", test outcomes typed in or loaded from a report) and **Refactor** (Layer 3:
-rules editor, violations with proofs, A* plan you can step through or play; boxes glide as files move).
-Every file/folder links to its source on GitHub, pinned to the analysed commit (`src/lib/repo/links.ts`).
-The **AI** panel (header button, docked right of both tabs) is a DeepSeek agent whose tools run the three layers'
-algorithms and drive the UI: it switches modes, zooms, highlights files (violet ring + "highlighted by AI" pill),
-sets test outcomes/rules, adopts and plays A* plans, reads source, and writes fixes/refactorings as diffs (the app
-never writes to the repo). Bug risk and Refactor panels have "Ask AI" buttons; backticked paths in replies open the file.
-**Autopilot** (runs when a project loads unless switched off — localStorage `architecture-mapper:autopilot`; also the
-panel/Overview buttons): three messages, one per stage — 1) `cluster_modules` (MQ search) then `set_architecture`
-(named modules, purposes, tiers → the diagram regroups, boxes glide, tiers stack top→bottom); 2) review the riskiest
-files → `report_findings` (badges on boxes, "AI code review" list with fixes, Bayes evidence); 3) rules → A* plan →
-play → `attach_patch` per step. The Overview's "AI autopilot" card summarises all three. The diagram's **Modules**
-select switches folders / MQ clusters (computed on demand, no AI needed) / AI architecture.
+The app is called **Kosmos** ("organised"); its look is a minimal comic page. Design brief, verdicts and rules for
+the map: `DESIGN.md` (read it before changing UI). **Every page is a route** (user verdict), and **the results show
+only what the AI made** (user verdict; the manual controls were removed):
+
+- `/` — start page: paste a GitHub URL (or `owner/repo`, or `…/tree/<branch>/<folder>`), pick one of your repos
+  (optional **Sign in with GitHub**, private included) or an example → `/analyze?repo=…`.
+- `/analyze?repo=…` — the **waiting screen**: the server shallow-clones and reads the code (streamed progress), then the
+  AI's pass starts (1 `cluster_modules` → `set_architecture` with a `kind` per part; 2 review the riskiest files →
+  `report_findings`; 3 rules → A* plan → `attach_patch` per step). It waits **only for stage 1** (user verdict), shown
+  as numbered panels inking in, the AI's current tool call and a timer, then replaces itself with
+  `/map/structure?repo=…`; stages 2–3 carry on in the background. A failed stage 1 offers "Try again" or "Open the map
+  anyway" (folders). Without a DeepSeek key: "Show Kosmos's own results" (folders, Bayes from history, rules from
+  folder names, an automatic A* plan).
+- `/map/structure`, `/map/bug-risk`, `/map/refactor` (`?repo=…`) — the results, sharing the `/map` layout (header with
+  the mode tabs as links (keys 1 2 3), Ask AI, New repo, account; one map panel; the shared panels). Each page renders
+  its yellow **story box** and its own panel. While the AI still works on Bug risk or Refactor, that page shows an
+  **"Analyzing…" panel** over the map (the three steps, the AI's current tool call, "Look at the parts meanwhile"; a
+  failed stage offers "Try again"), and its tab a spinner (then a dot when the result is new, a warning if it failed).
+  The AI's view changes are muted while its pass runs. Structure: the AI's named parts, the story, **the tour** (T /
+  → / ← / Esc). Bug risk: red halftone dots, "Bugs found" (each AI finding opens to its code with the faulty line in red; its
+  box gets a red outline), the Bayes ranking with the AI's evidence, read-only test results. Refactor: the AI's rules
+  (read-only), violations with proofs, its A* plan to play ("All tidy!" when nothing breaks), patches per step.
+  A map page without a finished session for that repo (e.g. after a reload) goes to `/analyze` (the pass runs again).
+
+At most one side panel is open (closed by default). Plain words first; the maths sits under "How was this worked
+out?". Tests, examples, stories and config are hidden unless turned on under View. Every file/folder links to its
+source on GitHub, pinned to the analysed commit. The **chat** ("Ask Kosmos") stays: the AI's tools run the three
+layers' algorithms and drive the map (modes = navigation, zoom, cyan highlights) and write fixes as diffs (the app
+never writes to the repo). **The map is grouped only by the AI's parts** (user verdict): raw MQ clusters are computed
+for the AI (and the evaluation) but never drawn; there is no grouping choice.
+**The map is a simple relationship diagram** (user verdict): one labelled box per part (name + one line of purpose),
+**only the main connections drawn at rest** (user verdict 2026-11-12, "minimize to the main points"; no shelves): an
+arrow already told by a strong enough detour through other parts, or one pointing up the map, is left out and appears
+when one of its parts is hovered or picked (or under View → "Show every connection"). Loops side by side, rows that wrap
+at 4 parts, and **a shape per kind of part**
+(`src/lib/graph/kinds.ts`: ui = window, entry = pill, logic = hexagon, data = cylinder, shared = library box, external
+= parallelogram, config = document) with a key in the map's corner. Kinds come from the AI (`set_architecture`) or
+`classifyModule` (folder/file names). Opening a part still shows its files; the plan plays on the part-level map.
+**Boxes can't be dragged** (user verdict 2026-11-12): the map has two fixed pictures, every part closed, and the same
+map with the parts the user opened showing their files, where every part keeps its row and its place in the row and
+the arrows between parts stay the same part-level arrows (a file's own arrows show when that file is in focus).
 
 ## Code map
 
@@ -121,9 +144,9 @@ Shared / pure (unit-tested):
 - `src/lib/graph/partition.ts` — `folderPartition` (the evaluation baseline), `autoFolderPartition` (strips the shared
   prefix, deepest folder level with ≤14 modules — what the UI uses), `modulesOf`, `moduleGraph` (what MQ needs).
 - `src/lib/graph/insights.ts` — role filtering, module stats, entry points, core files, summary sentences.
-- `src/lib/graph/project-analysis.ts` — `analyzeProject(graph, name, includeAll, grouping?)`: everything Overview and
+- `src/lib/graph/project-analysis.ts` — `analyzeProject(graph, name, includeAll, grouping?)`: everything the project panel and
   Diagram derive from a graph. A `Grouping` replaces the folder modules (uncovered files keep theirs); `prefix` stays
-  folder-based because rules use paths. Overview and Layers 2/3 always use the folder analysis; only the diagram regroups.
+  folder-based because rules use paths. The project panel and Layers 2/3 always use the folder analysis; only the diagram regroups.
 - `src/lib/cluster/` (Phase 2, from scratch) — `mq.ts` (TurboMQ, CF = 2μ/(2μ+ε); type-only imports weigh 0.5;
   `ModularityState` scores a one-file move in O(degree)), `search.ts` (steepest-ascent hill climbing with random restarts;
   simulated annealing with T0 from sampled worsening moves at p=0.8, geometric cooling, best-seen + HC polish; seeded
@@ -131,7 +154,10 @@ Shared / pure (unit-tested):
   folder-mates), `grouping.ts` (`clusterProject`, `partitionMQ`, `clusterLabels` from dominant folders,
   `architectureGrouping` for the AI's modules: ids `ai-N`, labels, descriptions, tiers). Sample: MQ ≈ 2.20 vs folders 0.77.
 - `src/lib/graph/view.ts` — (graph, partition, expanded modules) → visible boxes and merged edges (`members` = the
-  file-level `importKey`s behind each edge, so overlays can colour merged edges).
+  file-level `importKey`s behind each edge, so overlays can colour merged edges). Imports between two modules are one
+  module-level edge whether they are open or not; inside an opened module, file-to-file edges (those told by a detour,
+  `mainLinks`, are `detail`); a file's own imports across modules are `detail` edges. `detail` ⇒ `minor`, drawn only
+  while one of its own two boxes is in focus (not its whole part).
 - `src/lib/diagnose/` (Layer 2) — `history.ts` (log parser, bug-fix keyword classifier, recency-weighted per-file
   counts, bulk commits skipped), `coverage.ts` (test cases = test files nothing imports; static coverage = BFS over
   value imports, `decay^(hops-1)`), `bayes.ts` (Gamma–Poisson prior λ = (κ·m·√size + fixes + ω·changes)/(κ+1);
@@ -149,7 +175,7 @@ Shared / pure (unit-tested):
 - `src/lib/change/describe.ts` — plan text/metrics shared by the Refactor panel and the AI: `describeStep`, `pathAfter`,
   `structureMetrics`, `compareSearches`.
 - `src/lib/ai/` (client-safe except deepseek/limits) — `protocol.ts` (wire types, `parseChatRequest`), `specs.ts` (23 tool
-  schemas, incl. `cluster_modules`, `set_architecture`, `set_grouping`, `report_findings`, `attach_patch`), `autopilot.ts`
+  schemas, incl. `cluster_modules` (never drawn), `set_architecture`, `report_findings`, `attach_patch`), `autopilot.ts`
   (the three stage prompts and round budgets), `workspace.ts` (`AssistantWorkspace`: snapshot of Layer 2/3 state that tools mutate *immediately* — React
   only catches up after a render, so `set_rules` then `plan_refactoring` in one turn must see the new rules — and
   pushes every change to the UI through `WorkspaceEffects`; `resolvePath` for paths as people write them),
@@ -159,9 +185,18 @@ Shared / pure (unit-tested):
   — the tools on the sample (same ranking and plan through the AI path).
 
 Client:
-- `src/components/app/` — `AnalyzerApp` (streaming, header, tab state), `ProjectWorkspace` (keyed per analysis: both
-  tabs, stay mounted; builds the plan-state graph + overlays), `Landing`, `Overview`, `RepoForm`, `RepoPicker`,
-  `AccountButton`, `useGitHubSession`, `stream.ts`, `ui.tsx` (cards, chips, icons).
+- Routes: `src/app/page.tsx` (`Landing`), `src/app/analyze/page.tsx` (`AnalyzeScreen`), `src/app/map/layout.tsx`
+  (`MapShell`), `src/app/map/{structure,bug-risk,refactor}/page.tsx` (`StructureView` / `RiskView` / `RefactorView`),
+  `src/app/map/page.tsx` (→ structure). Pages reading `?repo=` sit under `<Suspense>` (Cache Components rule).
+- `src/components/app/` — `session.tsx`: `SessionRoot` (in the root layout, so state survives navigation: the analysis
+  run + GitHub session + repo input; `useRun()`), and per finished run a `ProjectSession` (`useProject()`): Layer 2/3
+  state, groupings, selection/highlights, the AI assistant + autopilot with its snapshot/effects, `ready` once the
+  pass is done; mode comes from the pathname, `goMode` navigates; the AI's view effects are skipped while the map is
+  not on screen (`setMapMounted`). `routes.ts` (`mapHref`, `analyzeHref`, `modeFromPath`, `canonicalSource`).
+  `AnalyzeScreen`, `MapShell` (+ `useMap()`: panel, tour, focus helpers, `askAI`; `getInset` measures
+  `[data-overlay]` so the camera frames around the story and panel), `ModeViews` (the three pages), `WorkspaceHeader`
+  (+ `MODES`, `NewRepo`), `Story.tsx` (`StoryBox`, `TourBox`, `SentenceText`, `Burst`), `SidePanel`, `ProjectPanel`,
+  `Landing` (+ `CoverMap`), `RepoForm`, `RepoPicker`, `AccountButton`, `useGitHubSession`, `stream.ts`, `ui.tsx`.
 - `src/components/layers/` — `useLayers` (Layer 2/3 state: outcomes, params, rules, plan, playback; a plan is tied to
   the rules *text* it was made for, so editing rules retires it; `adoptPlan`/`adoptComparison` take results computed by
   the AI; `report` = last loaded test report, whose failure messages `get_test_failures` reads; `review` + `useReview`
@@ -172,14 +207,35 @@ Client:
   DeepSeek requires on later requests when tools are used; `toApiMessages` answers cancelled calls), `AssistantPanel`,
   `Markdown.tsx` (safe subset, no HTML; inline code naming a file/module becomes a diagram link; diff colouring),
   `client.ts`, `useAutopilot` (stages in sequence via `send(prompt, {stage, maxRounds})`, stops at the first that does
-  not finish), `AiOverviewCard`. `ProjectWorkspace` builds the snapshot + effects in an effect-updated ref (`live`) and
-  holds the groupings (`applyGrouping`: regroup animation, small projects open every new module).
+  not finish; stages after a failed one are `skipped`; `start(only)` retries keep finished ones), `AiOverviewCard`.
+- `src/lib/graph/kinds.ts` — `ModuleKind`, `KIND_INFO` (plain names and meanings), `classifyModule` (tested). Shapes are
+  drawn in `nodes.tsx` (`shapePath`, `KindShape` with dots and rings inside the outline, `KindGlyph` for the key).
+- `src/lib/graph/organize.ts` (shelves = parts ≥60% of modules use and that use only shelves — switched off on the map
+  with `maxShelves: 0`; loop pairs; `rowsOf` = a row per part: the AI's tiers as bands, longest path inside a band,
+  loops cut, pairs share a row, rows wrap at `MAX_ROW` = 4, parts without arrows in a grid underneath; `mainLinks` with
+  `simplify` = the minor arrows: upward ones while both ends keep another arrow, then lightest first, an arrow a→b
+  whose b is still reachable over kept arrows each ≥ `DETOUR_STRENGTH` (0.5) × its weight — reachability is kept, and
+  on an acyclic map with strength 0 it is the transitive reduction) and
+  `src/lib/graph/story.ts` (`mapRows`, `projectStory`, `buildTour`: plain sentences with module/file tokens) — pure,
+  tested; both the map and the story read them.
 - `src/components/mapper/` — `DiagramView` (React Flow canvas; `mode`, `display` graph for plan states, `overlay`
-  for heat/violations/plan highlights — overlays never re-layout, `forceExpanded`, `animate`, `sidebar` slot),
-  `layout.ts` (ELK layered + orthogonal routes; module tiers → `elk.partitioning`), `edges.tsx` (draws ELK's route; falls back to smooth-step once an
-  endpoint is dragged), `nodes.tsx`, `Inspector.tsx`, `panel.tsx` (shared sidebar pieces).
-  Dragged positions are "pins" (`pinsRef`, keyed by view node id; children relative to their group) that survive
-  expand/collapse re-layouts: `applyPins` restores them, pushes colliding boxes sideways, and grows groups to fit.
+  for heat/violations/plan highlights — overlays never re-layout, `forceExpanded`, `animate`, `spotlight` (tour),
+  `onNodeActivate`, `getInset`; every camera fit goes through `pad()`; refits on big resizes; arrows into shelves are
+  hidden unless emphasised, then routed down a lane left of the map (`laneRoute`); minor arrows are hidden unless
+  active or emphasised, then routed by `route.ts`, side by side where they share a box; View → "Show every
+  connection" turns `simplify` off and re-lays out; boxes are never dragged: `closedView` (every part closed) is laid
+  out first and cached in `closedLayoutRef`, and a view with opened parts is laid out with its spots as `plan.closed`),
+  `layout.ts` (ELK layered + orthogonal routes; the organiser's rows → `elk.partitioning` (else module tiers);
+  `separateConnectedComponents: false` so parts without arrows keep their rows; NETWORK_SIMPLEX placement (Brandes–Köpf
+  staggered rows into a staircase); a closed part has one SOUTH out-port and one NORTH in-port per arrow, so junctions
+  only ever branch from one source (the old `mergeEdges` trunks joined unrelated arrows into frames round the map);
+  minor edges are not given to ELK; `plan.closed` = the closed map's spot per module, passed as `elk.position` with
+  `crossingMinimization.semiInteractive` on the root and on loop-pair containers, so opened parts keep the closed
+  map's order — `forceNodeModelOrder` did not hold the order in elkjs 0.12), `route.ts` (`routeAround`: an orthogonal
+  path around the boxes for arrows ELK did not route — A* over the grid of lines `margin` outside each box side, cost =
+  length + 60 per turn; searches within 160 px of the two ends first, then 480, then everywhere; gives up above 80
+  boxes in the area), `edges.tsx` (draws the given route; smooth-step when there is none), `nodes.tsx`,
+  `Inspector.tsx`, `panel.tsx` (shared sidebar pieces).
 - `samples/restaurant-app/` — own test project with planted smells: pages import `data/db.ts` directly although
   `services/menuService.ts` wraps it (the planner's example goal), a `cartStore ↔ pricing` cycle, and god file
   `lib/utils.ts`. Co-located `*.test.ts(x)` give Layer 2 its coverage; `git-log.txt` is a recorded history
@@ -187,8 +243,9 @@ Client:
   a pricing bug. Expected: Bayes ranks pricing.ts #1 (~73%), Ochiai #2; plan = 3 redirects via menuService + move
   `schema.ts` to `lib/` (cost 5.51; A* 55 expansions vs UCS ~254). Excluded from tsconfig/eslint/vitest.
 
-**Phase 2 in the UI:** groupings flow through `analyzeProject(..., grouping)` into the diagram only; `folderPartition`
-stays the evaluation baseline (MoJoFM is Phase 5). Cluster/AI module ids are not folders — no GitHub folder links.
+**Phase 2 in the UI:** only the AI's grouping flows through `analyzeProject(..., grouping)` into the diagram;
+`folderPartition` stays the evaluation baseline (MoJoFM is Phase 5). AI module ids are not folders — no GitHub folder
+links.
 
 ## Commands
 
@@ -233,4 +290,16 @@ stays the evaluation baseline (MoJoFM is Phase 5). Cluster/AI module ids are not
   changes `display`, not `analysis`, so the camera stays put there.
 - React compiler memo lint: read optional overlay fields into a local first (`const x = overlay?.y`) — a non-optional
   `overlay.y` inside the memo makes it infer `overlay` as the dependency.
+- CSS: entrance animations use `animation-fill-mode: backwards` (`.k-enter`): `both` keeps the last keyframe's
+  `opacity: 1` and stops boxes fading on focus. Global element rules (the `:focus-visible` ring) live in
+  `@layer base`; unlayered CSS beats every Tailwind utility regardless of specificity.
+- Window key handlers: `e.target` can be `window` (synthetic events) — check `instanceof Element` before `.closest`.
+- React Flow `fitView` accepts per-side padding (`{ top: "120px", … }`); `DiagramView.pad()` turns a ratio plus the
+  measured overlay insets into that. Overlays that should push the camera carry `data-overlay`.
+- Comic tokens and component classes (`k-btn`, `k-btn-press`, `k-btn-ink` for buttons on the yellow box, `k-tab`,
+  `k-link`, `k-halftone`, `k-sheet`, `k-fade`, `k-stamp`) are in `globals.css`; colours are the `--paper/--ink/--yel/
+  --cyan/--red` tokens (old names like `--panel`, `--accent` alias them). Text on yellow is `--on-yel` in both themes.
+- Cache Components keeps up to 3 visited routes alive but hidden (React `<Activity>`): their effects are cleaned up while
+  hidden and re-run when shown, and hidden DOM has zero size (the inset measuring skips it).
+- After adding routes, run `pnpm next typegen` if `tsc` complains about `LayoutProps`/`Route` (stale `.next/types`).
 - Never commit, stage or push — the user owns the git history.

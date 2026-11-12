@@ -46,7 +46,7 @@ export interface WorkspaceSnapshot {
   /** The plan made for `rulesText`, if any. */
   plan: PlanResult | null;
   step: number;
-  view: { tab: "overview" | "diagram"; mode: ViewMode; selection: ViewTarget | null; includeAll: boolean };
+  view: { mode: ViewMode; selection: ViewTarget | null; includeAll: boolean };
   /** What the diagram draws right now (tests too when they are shown). */
   diagram: { partition: Partition; labels: Record<string, string> };
   /** How the diagram groups files, and the groupings available. */
@@ -125,11 +125,10 @@ export class AssistantWorkspace {
 
   // ---- Layer 1
 
-  /** Runs the clustering search on the source files; `show` puts the clusters on the diagram. */
-  cluster(options: Partial<SearchOptions>, show: boolean): ClusterRun {
+  /** Runs the clustering search on the source files. The diagram shows only the AI's architecture, never raw clusters. */
+  cluster(options: Partial<SearchOptions>): ClusterRun {
     const run = clusterProject(this.s.analysis.graph, this.s.analysis, options);
     this.s.grouping.clusters = run;
-    if (show) this.setGrouping("clusters", { clusters: run });
     return run;
   }
 
@@ -144,7 +143,6 @@ export class AssistantWorkspace {
     this.s.diagram = { partition, labels: { ...this.s.analysis.labels, ...(g?.labels ?? {}) } };
     this.effects.setGrouping(kind, update);
     this.s.view.mode = "structure";
-    this.s.view.tab = "diagram";
   }
 
   // ---- Layer 3
@@ -214,15 +212,13 @@ export class AssistantWorkspace {
   // ---- View
 
   setMode(mode: ViewMode) {
-    if (this.s.view.mode === mode && this.s.view.tab === "diagram") return;
+    if (this.s.view.mode === mode) return;
     this.s.view.mode = mode;
-    this.s.view.tab = "diagram";
     this.effects.show({ mode });
   }
 
   show(options: { mode?: ViewMode; focus?: ViewTarget; highlight?: string[] }) {
     if (options.mode) this.s.view.mode = options.mode;
-    this.s.view.tab = "diagram";
     this.effects.show(options);
   }
 

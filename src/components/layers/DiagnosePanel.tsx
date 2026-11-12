@@ -1,264 +1,220 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
-import { Icon, timeAgo } from "@/components/app/ui";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { Icon, Spinner, timeAgo } from "@/components/app/ui";
 import { CodeBlock } from "@/components/assistant/Markdown";
 import type { SidebarContext } from "@/components/mapper/DiagramView";
-import { AskButton, FileRow, Heading, Note, PanelButton } from "@/components/mapper/panel";
+import { AskButton, Details, FileRow, Heading, Note, PanelButton } from "@/components/mapper/panel";
 import type { HistoryData } from "@/lib/analyze";
 import type { Outcome } from "@/lib/diagnose/bayes";
 import { reviewLogBayesFactor } from "@/lib/diagnose/bayes";
-import { DEFAULT_DIAGNOSIS_PARAMS, type DiagnosisParams, type FileRisk } from "@/lib/diagnose/diagnose";
+import type { FileRisk } from "@/lib/diagnose/diagnose";
 import { SEVERITY_WEIGHT, type Finding } from "@/lib/diagnose/review";
 import type { ProjectSource } from "@/lib/repo/overview";
-import { baseName, formatFactor, formatProb, heatBackground, hops, relPath } from "./format";
+import { baseName, formatFactor, formatProb, hops, relPath } from "./format";
 import type { Layers } from "./useLayers";
 
-const RANKED_PREVIEW = 10;
-const FACTOR_PREVIEW = 6;
+const RANKED_PREVIEW = 8;
 
 function commitLink(source: ProjectSource, sha: string): string | null {
   return source.kind === "github" ? `${source.url}/commit/${sha}` : null;
 }
 
-function ProbBar({ p, max }: { p: number; max: number }) {
-  return (
-    <span className="h-1.5 w-14 shrink-0 overflow-hidden rounded-full bg-[var(--hover)]">
-      <span className="block h-full rounded-full bg-[var(--heat)]" style={{ width: `${max > 0 ? Math.max(3, (p / max) * 100) : 0}%` }} />
-    </span>
-  );
+/** Likelihood as a strip of halftone dots: the same print as the map. */
+function Dots({ p, max }: { p: number; max: number }) {
+  return <span aria-hidden className="k-halftone h-3 w-14 shrink-0 rounded-[3px] border-[1.5px] border-[var(--ink)]" style={{ "--dot": max > 0 ? p / max : 0 } as CSSProperties} />;
 }
 
 function OutcomeIcon({ outcome }: { outcome: Outcome }) {
   return outcome === "fail" ? (
-    <span title="failed" className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-[var(--danger-soft)] text-[var(--danger)]">
-      <Icon.Close className="h-2.5 w-2.5" />
+    <span title="failed" className="grid h-5 w-5 shrink-0 place-items-center rounded-full border-[1.5px] border-[var(--danger)] text-[var(--danger)]">
+      <Icon.Close className="h-3 w-3" />
     </span>
   ) : (
-    <span title="passed" className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-[var(--added-soft)] text-[var(--added)]">
-      <Icon.Check className="h-2.5 w-2.5" />
+    <span title="passed" className="grid h-5 w-5 shrink-0 place-items-center rounded-full border-[1.5px] border-[var(--added)] text-[var(--added)]">
+      <Icon.Check className="h-3 w-3" />
     </span>
   );
 }
 
-function Row({ label, sub, value, children }: { label: ReactNode; sub?: ReactNode; value: ReactNode; children?: ReactNode }) {
-  return (
-    <li className="rounded-lg bg-[var(--hover)] px-2.5 py-2">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="truncate text-[12.5px] font-medium">{label}</div>
-          {sub && <div className="text-[11px] text-[var(--muted)]">{sub}</div>}
-        </div>
-        <span className="shrink-0 font-mono text-[12px] font-semibold tabular-nums">{value}</span>
-      </div>
-      {children}
-    </li>
-  );
-}
-
-/** "Why is this file suspected?" — the prior, each test's Bayes factor, and the posterior they give. */
+/** "Why is this file suspected?" in plain words; the prior and every Bayes factor under the fold. */
 function WhyCard({ risk, total, prefix, source, now, hasOutcomes, failing, onAsk }: { risk: FileRisk; total: number; prefix: string; source: ProjectSource; now: number; hasOutcomes: boolean; failing: number; onAsk?: () => void }) {
-  const [allFactors, setAllFactors] = useState(false);
   const h = risk.history;
-  const factors = allFactors ? risk.factors : risk.factors.slice(0, FACTOR_PREVIEW);
+  const fails = risk.factors.filter((f) => f.outcome === "fail");
+  const passes = risk.factors.filter((f) => f.outcome === "pass");
+  const reasons: ReactNode[] = [];
+  reasons.push(
+    h && h.changes > 0 ? (
+      <>
+        <b>Its history:</b> {h.fixes} of its {h.changes} recorded changes {h.fixes === 1 ? "was a bug fix" : "were bug fixes"}.
+      </>
+    ) : (
+      <>
+        <b>Its history:</b> no changes recorded, so only its size ({risk.loc} lines) counts.
+      </>
+    ),
+  );
+  if (fails.length > 0) reasons.push(<><b>{fails.length} failing {fails.length === 1 ? "test uses" : "tests use"} it,</b> which raises the odds.</>);
+  if (passes.length > 0) reasons.push(<>{passes.length} passing {passes.length === 1 ? "test uses" : "tests use"} it, which lowers the odds.</>);
+  if (hasOutcomes && risk.coveredBy === 0) reasons.push(<>No test reaches this file, so test results can&apos;t move its odds.</>);
+  if (risk.review) reasons.push(risk.review.flagged ? <><b>The AI review flagged it:</b> {risk.review.titles.join("; ")}.</> : <>The AI read it and found nothing wrong.</>);
+
   return (
-    <section className="rounded-xl border border-[var(--border)] p-3">
+    <section className="rounded-xl border-[2.5px] border-[var(--ink)] p-4 shadow-[4px_4px_0_var(--ink)]">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="break-all font-mono text-[13.5px] font-semibold">{baseName(risk.id)}</p>
-          <p className="break-all font-mono text-[11px] text-[var(--muted)]">{relPath(risk.id, prefix)}</p>
+          <p className="break-all font-mono text-[17px] font-bold">{baseName(risk.id)}</p>
+          <p className="break-all font-mono text-[12.5px] text-[var(--muted)]">{relPath(risk.id, prefix)}</p>
         </div>
         <div className="shrink-0 text-right">
-          <div className="text-[22px] font-semibold leading-none tabular-nums">{formatProb(risk.posterior)}</div>
-          <div className="mt-1 text-[11px] text-[var(--muted)]">
+          <div className="font-letter text-[30px] font-extrabold leading-none tabular-nums">{formatProb(risk.posterior)}</div>
+          <div className="mt-1 text-[13px] text-[var(--muted)]">
             #{risk.rank} of {total}
           </div>
         </div>
       </div>
-
-      <ol className="mt-3 space-y-1.5">
-        <Row label="Prior: history & size" sub="before any test result" value={formatProb(risk.prior.p)}>
-          <div className="mt-1.5 space-y-0.5 text-[11.5px] leading-relaxed text-[var(--muted)]">
-            <p>
-              {h ? (
-                <>
-                  <strong className="font-medium text-[var(--foreground)]">{h.fixes}</strong> bug-fix {h.fixes === 1 ? "commit" : "commits"} among {h.changes}{" "}
-                  {h.changes === 1 ? "change" : "changes"}
-                </>
-              ) : (
-                "No commits touch this file in the history read"
-              )}
-              {" · "}
-              {risk.loc} lines
-            </p>
-            <p title="Gamma–Poisson posterior mean: size-based baseline plus recency-weighted bug evidence">
-              Expected bugs λ = {risk.prior.sizePart.toFixed(2)} (size) + {risk.prior.historyPart.toFixed(2)} (history)
-            </p>
-            {h?.recentFixes.map((fix) => {
-              const href = commitLink(source, fix.sha);
-              const subject = <span className="text-[var(--foreground)]">{fix.subject}</span>;
-              return (
-                <p key={fix.sha} className="truncate" title={fix.subject}>
-                  ↳{" "}
-                  {href ? (
-                    <a href={href} target="_blank" rel="noreferrer" className="hover:underline">
-                      {subject}
-                    </a>
-                  ) : (
-                    subject
-                  )}{" "}
-                  · {timeAgo(new Date(fix.time * 1000).toISOString(), now)}
-                </p>
-              );
-            })}
-          </div>
-        </Row>
-        {factors.map((f) => (
-          <Row
-            key={f.test}
-            label={
-              <span className="flex items-center gap-1.5">
-                <OutcomeIcon outcome={f.outcome} />
-                <span className="truncate font-mono text-[11.5px]">{baseName(f.test)}</span>
-              </span>
-            }
-            sub={`${f.outcome === "fail" ? "failed" : "passed"} · ${hops(f.depth)}`}
-            value={formatFactor(f.logBF)}
-          />
+      <p className="mt-3 text-[14px] font-bold">Why Kosmos suspects it</p>
+      <ul className="mt-1 list-disc space-y-1 pl-5 text-[14.5px] leading-relaxed marker:text-[var(--muted)]">
+        {reasons.map((r, i) => (
+          <li key={i}>{r}</li>
         ))}
-        {risk.review && (
-          <Row
-            label={
-              <span className="flex items-center gap-1.5">
-                <Icon.Sparkle className="h-3.5 w-3.5 shrink-0 text-[var(--ai)]" />
-                AI code review
-              </span>
-            }
-            sub={risk.review.flagged ? risk.review.titles.join(" · ") : "read it and found nothing wrong"}
-            value={formatFactor(risk.review.logBF)}
-          />
-        )}
-        {risk.factors.length > FACTOR_PREVIEW && (
-          <li>
-            <button onClick={() => setAllFactors((v) => !v)} className="px-1 text-[11.5px] text-[var(--accent-strong)] hover:underline">
-              {allFactors ? "Show fewer" : `+ ${risk.factors.length - FACTOR_PREVIEW} more tests`}
-            </button>
-          </li>
-        )}
-        <li className="flex items-center justify-between px-2.5 pt-1 text-[12.5px] font-semibold">
-          <span>Posterior</span>
-          <span className="font-mono tabular-nums">{formatProb(risk.posterior)}</span>
-        </li>
-      </ol>
-      <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">
-        {!hasOutcomes
-          ? "No test results yet — mark tests below to add evidence."
-          : risk.coveredBy === 0
-            ? "No test file reaches this file, so test results can neither blame nor clear it."
-            : "Each ×factor is a Bayes factor: how much that outcome multiplies the odds the bug is here."}
-      </p>
-      {failing > 0 && (
-        <p className="mt-1 text-[11px] text-[var(--muted)]">
-          Ochiai baseline: {risk.ochiai.toFixed(2)}, rank #{risk.ochiaiRank}
-        </p>
+      </ul>
+      {h && h.recentFixes.length > 0 && (
+        <div className="mt-2 space-y-0.5 text-[13px] text-[var(--muted)]">
+          {h.recentFixes.slice(0, 3).map((fix) => {
+            const href = commitLink(source, fix.sha);
+            return (
+              <p key={fix.sha} className="truncate" title={fix.subject}>
+                ↳{" "}
+                {href ? (
+                  <a href={href} target="_blank" rel="noreferrer" className="text-[var(--foreground)] underline underline-offset-2">
+                    {fix.subject}
+                  </a>
+                ) : (
+                  <span className="text-[var(--foreground)]">{fix.subject}</span>
+                )}{" "}
+                · {timeAgo(new Date(fix.time * 1000).toISOString(), now)}
+              </p>
+            );
+          })}
+        </div>
       )}
       {onAsk && (
-        <AskButton className="mt-2" onClick={onAsk}>
+        <AskButton className="mt-3" onClick={onAsk}>
           Ask AI to inspect this file
         </AskButton>
       )}
+      <Details>
+        <p>
+          Kosmos uses Bayes&apos; rule. It starts from a <b>prior</b> of {formatProb(risk.prior.p)} (expected bugs λ = {risk.prior.sizePart.toFixed(2)} from size + {risk.prior.historyPart.toFixed(2)}{" "}
+          from recency-weighted fixes), then multiplies the odds by a <b>Bayes factor</b> for each test result:
+        </p>
+        <ul className="space-y-1">
+          {risk.factors.map((f) => (
+            <li key={f.test} className="flex items-center gap-2">
+              <OutcomeIcon outcome={f.outcome} />
+              <span className="min-w-0 flex-1 truncate font-mono text-[12.5px]">{baseName(f.test)}</span>
+              <span className="shrink-0 text-[12.5px] text-[var(--muted)]">{hops(f.depth)}</span>
+              <span className="w-12 shrink-0 text-right font-mono font-bold tabular-nums">{formatFactor(f.logBF)}</span>
+            </li>
+          ))}
+          {risk.review && (
+            <li className="flex items-center gap-2">
+              <Icon.Sparkle className="h-4 w-4 shrink-0 text-[var(--ai)]" />
+              <span className="flex-1">AI code review</span>
+              <span className="w-12 shrink-0 text-right font-mono font-bold tabular-nums">{formatFactor(risk.review.logBF)}</span>
+            </li>
+          )}
+        </ul>
+        <p>
+          The result, normalised over all files, is the posterior: <b>{formatProb(risk.posterior)}</b>.
+          {failing > 0 && ` The classic Ochiai method ranks this file #${risk.ochiaiRank} (score ${risk.ochiai.toFixed(2)}).`}
+        </p>
+      </Details>
     </section>
   );
 }
 
-const SEVERITY_TONE = { high: "bg-[var(--danger)]", medium: "bg-[var(--warn)]", low: "bg-[var(--muted)]" } as const;
 
-/** One finding of the AI's code review: where, what, and the suggested fix. */
-function FindingRow({ finding: f, prefix, onFocus }: { finding: Finding; prefix: string; onFocus: (file: string) => void }) {
+const SEVERITY_WORD = { high: "serious", medium: "worth fixing", low: "minor" } as const;
+
+/** The lines around a bug, the bug's line printed in red. */
+function BugCode({ file, line, read }: { file: string; line: number; read: (path: string) => Promise<string> }) {
+  const [got, setGot] = useState<{ text: string } | { error: string } | null>(null);
+  useEffect(() => {
+    let live = true;
+    read(file).then(
+      (text) => live && setGot({ text }),
+      (e: unknown) => live && setGot({ error: e instanceof Error ? e.message : String(e) }),
+    );
+    return () => {
+      live = false;
+    };
+  }, [file, read]);
+
+  if (!got) {
+    return (
+      <p className="flex items-center gap-2 text-[13.5px] text-[var(--muted)]">
+        <Spinner className="h-3.5 w-3.5" /> Fetching the code…
+      </p>
+    );
+  }
+  if ("error" in got) return <Note>Couldn&apos;t show the code: {got.error}</Note>;
+  const all = got.text.split("\n");
+  const start = Math.max(1, line - 3);
+  const end = Math.min(all.length, line + 3);
+  return (
+    <pre className="overflow-x-auto rounded-lg border-2 border-[var(--ink)] bg-[var(--canvas)] py-1.5 font-mono text-[12.5px] leading-[1.6]" aria-label={`${baseName(file)}, lines ${start} to ${end}; line ${line} has the bug`}>
+      {all.slice(start - 1, end).map((text, i) => {
+        const n = start + i;
+        const bug = n === line;
+        return (
+          <div key={n} className={`flex border-l-4 pr-3 ${bug ? "border-[var(--red)] bg-[var(--danger-soft)] font-bold text-[var(--red)]" : "border-transparent"}`}>
+            <span className={`w-10 shrink-0 select-none pr-3 text-right ${bug ? "" : "text-[var(--muted)]"}`}>{n}</span>
+            <span className="whitespace-pre">{text || " "}</span>
+          </div>
+        );
+      })}
+    </pre>
+  );
+}
+
+/** One bug the AI found: where, what, the code with the line in red, and the suggested fix. */
+function FindingRow({ finding: f, prefix, onFocus, read }: { finding: Finding; prefix: string; onFocus: (file: string) => void; read?: (path: string) => Promise<string> }) {
   const [open, setOpen] = useState(false);
   return (
-    <li className="rounded-lg border border-[var(--border)]">
-      <button onClick={() => setOpen((v) => !v)} className="flex w-full items-start gap-2 px-2.5 py-2 text-left">
-        <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${SEVERITY_TONE[f.severity]}`} title={`${f.severity} severity`} />
+    <li className={`rounded-lg border-2 ${f.severity === "high" ? "border-[var(--red)]" : "border-[var(--ink)]"}`}>
+      <button onClick={() => setOpen((v) => !v)} aria-expanded={open} className="flex w-full items-start gap-2.5 px-3 py-2.5 text-left">
+        <Icon.Alert className={`mt-0.5 h-4 w-4 shrink-0 ${f.severity === "low" ? "text-[var(--muted)]" : "text-[var(--red)]"}`} />
         <span className="min-w-0 flex-1">
-          <span className="block text-[12.5px] font-medium leading-snug">{f.title}</span>
-          <span className="block truncate font-mono text-[11px] text-[var(--muted)]">
+          <span className="block text-[14.5px] font-bold leading-snug">{f.title}</span>
+          <span className="block truncate font-mono text-[12.5px] text-[var(--muted)]">
             {relPath(f.file, prefix)}
-            {f.line ? `:${f.line}` : ""}
+            {f.line ? `, line ${f.line}` : ""} · {SEVERITY_WORD[f.severity]}
           </span>
         </span>
+        <span className="shrink-0 pt-0.5 text-[12.5px] font-bold text-[var(--muted)]">{open ? "Hide" : "Show"}</span>
       </button>
       {open && (
-        <div className="space-y-2 border-t border-[var(--border)] px-2.5 py-2">
-          <p className="whitespace-pre-line text-[12px] leading-relaxed">{f.detail}</p>
-          {f.fix && <CodeBlock lang="diff" text={f.fix} />}
-          <PanelButton onClick={() => onFocus(f.file)}>Show {baseName(f.file)}</PanelButton>
+        <div className="space-y-2.5 border-t-2 border-dashed border-[var(--border)] px-3 py-2.5">
+          {f.line && read && <BugCode file={f.file} line={f.line} read={read} />}
+          <p className="whitespace-pre-line text-[14px] leading-relaxed">{f.detail}</p>
+          {f.fix && (
+            <div>
+              <p className="mb-1 text-[13px] font-bold">Suggested fix</p>
+              <CodeBlock lang="diff" text={f.fix} />
+            </div>
+          )}
+          <PanelButton onClick={() => onFocus(f.file)}>Show {baseName(f.file)} on the map</PanelButton>
         </div>
       )}
     </li>
-  );
-}
-
-function Slider({ label, hint, value, min, max, step, format, onChange }: { label: string; hint: string; value: number; min: number; max: number; step: number; format: (v: number) => string; onChange: (v: number) => void }) {
-  return (
-    <label className="block" title={hint}>
-      <span className="flex items-baseline justify-between text-[12px]">
-        <span>{label}</span>
-        <span className="font-mono tabular-nums text-[var(--muted)]">{format(value)}</span>
-      </span>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-full accent-[var(--accent)]" />
-      <span className="block text-[11px] leading-snug text-[var(--muted)]">{hint}</span>
-    </label>
-  );
-}
-
-function ModelSettings({ params, onChange }: { params: DiagnosisParams; onChange: (p: DiagnosisParams) => void }) {
-  const set = (key: keyof DiagnosisParams) => (v: number) => onChange({ ...params, [key]: v });
-  const pct = (v: number) => `${Math.round(v * 100)}%`;
-  return (
-    <details className="group mt-5 rounded-lg border border-[var(--border)]">
-      <summary className="cursor-pointer select-none px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">Model settings</summary>
-      <div className="space-y-3 px-3 pb-3">
-        <Slider label="Activation α" hint="Chance a test fails when it runs the buggy file." value={params.activation} min={0.05} max={0.99} step={0.01} format={pct} onChange={set("activation")} />
-        <Slider label="Noise ε" hint="Chance a test fails without running it (flaky tests, missed coverage)." value={params.noise} min={0.001} max={0.3} step={0.001} format={(v) => `${(v * 100).toFixed(1)}%`} onChange={set("noise")} />
-        <Slider label="Coverage per hop" hint="How much weaker coverage gets for each import between test and file." value={params.coverageDecay} min={0.1} max={1} step={0.05} format={pct} onChange={set("coverageDecay")} />
-        <Slider label="History half-life" hint="A change this much older than the newest commit counts half." value={params.halfLifeDays} min={30} max={720} step={10} format={(v) => `${v} days`} onChange={set("halfLifeDays")} />
-        <Slider label="Ordinary change weight ω" hint="How much a non-fix change counts, relative to a bug fix." value={params.changeWeight} min={0} max={1} step={0.05} format={(v) => v.toFixed(2)} onChange={set("changeWeight")} />
-        <Slider label="Size baseline κ" hint="How strongly priors lean towards file size instead of history." value={params.priorStrength} min={0.1} max={5} step={0.1} format={(v) => v.toFixed(1)} onChange={set("priorStrength")} />
-        <PanelButton onClick={() => onChange(DEFAULT_DIAGNOSIS_PARAMS)}>Reset to defaults</PanelButton>
-      </div>
-    </details>
-  );
-}
-
-function TriState({ value, onChange, label }: { value: Outcome | null; onChange: (v: Outcome | null) => void; label: string }) {
-  const options: { v: Outcome | null; text: string; title: string; on: string }[] = [
-    { v: null, text: "?", title: "unknown", on: "bg-[var(--panel)] text-[var(--foreground)] shadow-sm" },
-    { v: "pass", text: "✓", title: "passed", on: "bg-[var(--added-soft)] text-[var(--added)] shadow-sm" },
-    { v: "fail", text: "✗", title: "failed", on: "bg-[var(--danger-soft)] text-[var(--danger)] shadow-sm" },
-  ];
-  return (
-    <span className="flex shrink-0 rounded-md bg-[var(--hover)] p-0.5" role="radiogroup" aria-label={`Outcome of ${label}`}>
-      {options.map((o) => (
-        <button
-          key={o.title}
-          role="radio"
-          aria-checked={value === o.v}
-          title={o.title}
-          onClick={() => onChange(o.v)}
-          className={`h-5 w-6 rounded text-[11px] font-semibold ${value === o.v ? o.on : "text-[var(--muted)] hover:text-[var(--foreground)]"}`}
-        >
-          {o.text}
-        </button>
-      ))}
-    </span>
   );
 }
 
 export function DiagnosePanel({
   layers,
   history,
-  exampleReport,
   ctx,
   prefix,
   source,
@@ -266,10 +222,10 @@ export function DiagnosePanel({
   modules,
   analysedAt,
   onAsk,
+  readSource,
 }: {
   layers: Layers;
   history: HistoryData | null;
-  exampleReport?: { name: string; text: string };
   ctx: SidebarContext;
   prefix: string;
   source: ProjectSource;
@@ -277,14 +233,14 @@ export function DiagnosePanel({
   modules: Map<string, string[]>;
   analysedAt: number;
   onAsk?: (prompt: string) => void;
+  /** Source text of a project file, to show the code around a bug. */
+  readSource?: (path: string) => Promise<string>;
 }) {
-  const { diagnosis: d, outcomes, setOutcome, setOutcomes, params, setParams, loadReport, reportNote } = layers;
+  const { diagnosis: d, params } = layers;
   const [showAll, setShowAll] = useState(false);
-  const fileInput = useRef<HTMLInputElement>(null);
   const { selection } = ctx;
   const selectedRisk = selection?.type === "file" ? d.byId.get(selection.id) : undefined;
   const ranked = showAll ? d.files : d.files.slice(0, RANKED_PREVIEW);
-  const unknown = d.tests.length - d.failing - d.passing;
 
   let selected: ReactNode = null;
   if (selectedRisk) {
@@ -302,17 +258,17 @@ export function DiagnosePanel({
       />
     );
   } else if (selection?.type === "file") {
-    selected = <Note>{relPath(selection.id, prefix)} is not a source file, so it is not ranked.</Note>;
+    selected = <Note>{relPath(selection.id, prefix)} is a test or config file, so Kosmos doesn&apos;t rank it.</Note>;
   } else if (selection?.type === "module") {
     const files = (modules.get(selection.id) ?? []).map((f) => d.byId.get(f)).filter((r): r is FileRisk => !!r).sort((a, b) => a.rank - b.rank);
     const total = files.reduce((s, f) => s + f.posterior, 0);
     selected = (
-      <section className="rounded-xl border border-[var(--border)] p-3">
+      <section className="rounded-xl border-[2.5px] border-[var(--ink)] p-4 shadow-[4px_4px_0_var(--ink)]">
         <div className="flex items-start justify-between gap-3">
-          <p className="text-[14px] font-semibold">{labels[selection.id] ?? selection.id}</p>
-          <span className="text-[20px] font-semibold leading-none tabular-nums">{formatProb(total)}</span>
+          <p className="text-[18px] font-bold">{labels[selection.id] ?? selection.id}</p>
+          <span className="font-letter text-[28px] font-extrabold leading-none tabular-nums">{formatProb(total)}</span>
         </div>
-        <p className="mb-2 text-[11px] text-[var(--muted)]">Chance the bug is somewhere in this module</p>
+        <p className="mb-2 text-[13.5px] text-[var(--muted)]">Chance the bug is somewhere in this part</p>
         {files.map((f) => (
           <FileRow key={f.id} file={relPath(f.id, prefix)} meta={formatProb(f.posterior)} onClick={() => ctx.focusFile(f.id)} />
         ))}
@@ -321,166 +277,130 @@ export function DiagnosePanel({
   }
 
   return (
-    <aside className="flex w-[340px] shrink-0 flex-col border-l border-[var(--border)] bg-[var(--panel)]">
-      <div className="flex h-11 shrink-0 items-center justify-between border-b border-[var(--border)] px-4">
-        <span className="text-[12px] font-semibold uppercase tracking-wider text-[var(--muted)]">Bug risk</span>
-        {selection && (
-          <button onClick={ctx.clear} className="rounded-md p-1 text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--foreground)]" title="Clear selection">
-            <Icon.Close className="h-3.5 w-3.5" />
-          </button>
-        )}
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        {selected ?? (
-          <p className="text-[13px] leading-relaxed text-[var(--muted)]">
-            How likely each file is to hold a bug: its <strong className="font-medium text-[var(--foreground)]">git history</strong> sets the prior, and{" "}
-            <strong className="font-medium text-[var(--foreground)]">test results</strong> update it by Bayes&apos; rule. Click a file to see why.
-          </p>
-        )}
+    <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+      {selected ?? (
+        <p className="text-[15px] leading-relaxed">
+          The AI read the riskiest files for real bugs. The ranking weighs each file&apos;s <b>history of fixes</b>, its <b>size</b>, the <b>test results</b> the AI found and its own review. Click a file to see why it is suspected.
+        </p>
+      )}
 
-        <Heading>Most likely locations</Heading>
-        <ol>
-          {ranked.map((f) => (
-            <li key={f.id}>
-              <FileRow
-                file={relPath(f.id, prefix)}
-                onClick={() => ctx.focusFile(f.id)}
-                meta={
-                  <span className="flex items-center gap-2">
-                    {d.failing > 0 && (
-                      <span className="text-[10px] text-[var(--muted)]" title="Rank by Ochiai, the spectrum-based baseline">
-                        O#{f.ochiaiRank}
-                      </span>
-                    )}
-                    <ProbBar p={f.posterior} max={d.maxPosterior} />
-                    <span className="w-10 text-right font-mono text-[11px] text-[var(--foreground)]">{formatProb(f.posterior)}</span>
-                  </span>
-                }
-              >
-                <span className="w-5 shrink-0 text-right text-[11px] tabular-nums text-[var(--muted)]">{f.rank}</span>
-              </FileRow>
-            </li>
-          ))}
-        </ol>
-        {d.files.length > RANKED_PREVIEW && (
-          <button onClick={() => setShowAll((v) => !v)} className="mt-1 px-2 text-[11.5px] text-[var(--accent-strong)] hover:underline">
-            {showAll ? "Show top 10" : `Show all ${d.files.length}`}
-          </button>
-        )}
-        {layers.review && (
-          <>
-            <Heading
-              action={
-                <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-[var(--muted)]" title="Count the review as Bayesian evidence in the ranking">
-                  <input type="checkbox" checked={layers.useReview} onChange={(e) => layers.setUseReview(e.target.checked)} className="accent-[var(--ai)]" />
-                  Use as evidence
-                </label>
+      <Heading>Bugs found</Heading>
+      {!layers.review ? (
+        <Note>The AI didn&apos;t review the code this time, so the red dots are only a guess from the history and file sizes.</Note>
+      ) : layers.review.findings.length === 0 ? (
+        <Note>The AI read {layers.review.reviewed.length} {layers.review.reviewed.length === 1 ? "file" : "files"} and found nothing wrong.</Note>
+      ) : (
+        <>
+          <p className="text-[14px] leading-relaxed">
+            <b className="text-[var(--red)]">
+              {layers.review.findings.length} {layers.review.findings.length === 1 ? "bug" : "bugs"}
+            </b>{" "}
+            in {layers.review.reviewed.length} {layers.review.reviewed.length === 1 ? "file" : "files"} the AI read. Their boxes are outlined in red. Open one to see the line.
+          </p>
+          <ul className="mt-2 space-y-2">
+            {[...layers.review.findings]
+              .sort((a, b) => SEVERITY_WEIGHT[b.severity] - SEVERITY_WEIGHT[a.severity])
+              .map((f, i) => (
+                <FindingRow key={`${f.file}:${f.line ?? ""}:${i}`} finding={f} prefix={prefix} onFocus={ctx.focusFile} read={readSource} />
+              ))}
+          </ul>
+          <Details label="How do the bugs change the guess?">
+            <p>
+              Each file the AI flags counts as evidence: its odds go up to {formatFactor(reviewLogBayesFactor(SEVERITY_WEIGHT.high, params))} for a serious bug. A file it read and found clean goes{" "}
+              {formatFactor(reviewLogBayesFactor(null, params))}.
+            </p>
+          </Details>
+        </>
+      )}
+
+      <Heading>Most likely places</Heading>
+      <ol className="space-y-0.5">
+        {ranked.map((f) => (
+          <li key={f.id}>
+            <FileRow
+              file={relPath(f.id, prefix)}
+              onClick={() => ctx.focusFile(f.id)}
+              meta={
+                <span className="flex items-center gap-2">
+                  <Dots p={f.posterior} max={d.maxPosterior} />
+                  <span className="w-11 text-right font-mono text-[13px] font-bold text-[var(--foreground)]">{formatProb(f.posterior)}</span>
+                </span>
               }
             >
-              <span className="inline-flex items-center gap-1.5">
-                <Icon.Sparkle className="h-3 w-3 text-[var(--ai)]" />
-                AI code review
-              </span>
-            </Heading>
-            <Note>
-              {layers.review.findings.length === 0 ? "No problems found" : `${layers.review.findings.length} ${layers.review.findings.length === 1 ? "finding" : "findings"}`} in{" "}
-              {layers.review.reviewed.length} {layers.review.reviewed.length === 1 ? "file" : "files"} read. A flagged file&apos;s odds go up to{" "}
-              {formatFactor(reviewLogBayesFactor(SEVERITY_WEIGHT.high, params))}; a file read and found clean goes {formatFactor(reviewLogBayesFactor(null, params))}.
-            </Note>
-            <ul className="mt-1.5 space-y-1.5">
-              {[...layers.review.findings]
-                .sort((a, b) => SEVERITY_WEIGHT[b.severity] - SEVERITY_WEIGHT[a.severity])
-                .map((f, i) => (
-                  <FindingRow key={`${f.file}:${f.line ?? ""}:${i}`} finding={f} prefix={prefix} onFocus={ctx.focusFile} />
-                ))}
-            </ul>
-          </>
-        )}
+              <span className="w-5 shrink-0 text-right text-[13px] tabular-nums text-[var(--muted)]">{f.rank}</span>
+            </FileRow>
+          </li>
+        ))}
+      </ol>
+      {d.files.length > RANKED_PREVIEW && (
+        <button onClick={() => setShowAll((v) => !v)} className="k-link mt-2 px-2 text-[14px]">
+          {showAll ? `Show the top ${RANKED_PREVIEW}` : `Show all ${d.files.length}`}
+        </button>
+      )}
+      <p className="mt-2 flex items-center gap-2 px-2 text-[13px] text-[var(--muted)]">
+        <Dots p={1} max={1} /> More dots on the map means more likely.
+      </p>
+      {d.failing > 0 && (
+        <Details label="How does this compare with the classic method?">
+          <p>
+            Ochiai, the standard spectrum-based method, ranks files only by which failing tests touch them. Kosmos also weighs each file&apos;s history and the passing tests. Ochiai&apos;s ranks for
+            the files above:
+          </p>
+          <ul className="space-y-0.5 font-mono text-[12.5px]">
+            {ranked.slice(0, 8).map((f) => (
+              <li key={f.id} className="flex justify-between gap-2">
+                <span className="truncate">{baseName(f.id)}</span>
+                <span className="shrink-0">
+                  Kosmos #{f.rank} · Ochiai #{f.ochiaiRank}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Details>
+      )}
 
-        <div className="mt-3 flex items-center gap-2 text-[11px] text-[var(--muted)]">
-          <span>less</span>
-          <span
-            className="h-2 flex-1 rounded-full border border-[var(--border)]"
-            style={{ background: `linear-gradient(90deg, ${heatBackground(0, "var(--module-bg)")}, ${heatBackground(1, "var(--module-bg)")})` }}
-          />
-          <span>more likely</span>
-        </div>
-        <p className="mt-1 text-[11px] text-[var(--muted)]">Boxes share one scale: the likeliest box on screen is darkest.</p>
-
-        <Heading
-          action={
-            <span className="flex gap-1">
-              <PanelButton onClick={() => fileInput.current?.click()} title="Jest/Vitest --json, Mocha JSON or JUnit XML. Read in your browser; nothing is uploaded.">
-                Load report
-              </PanelButton>
-              <PanelButton onClick={() => setOutcomes(new Map(d.tests.map((t) => [t.id, "pass" as const])))} disabled={d.tests.length === 0}>
-                All pass
-              </PanelButton>
-              <PanelButton onClick={() => setOutcomes(new Map())} disabled={outcomes.size === 0}>
-                Clear
-              </PanelButton>
-            </span>
-          }
-        >
-          Test results
-        </Heading>
-        <input
-          ref={fileInput}
-          type="file"
-          accept=".json,.xml,application/json,text/xml"
-          className="hidden"
-          onChange={async (e) => {
-            const file = e.target.files?.[0];
-            e.target.value = "";
-            if (file) loadReport(await file.text(), file.name);
-          }}
-        />
-        {d.tests.length === 0 ? (
-          <Note>No test files were found, so the ranking rests on history and size alone.</Note>
-        ) : (
-          <>
-            <Note>
-              {d.failing} failing · {d.passing} passing · {unknown} unknown — a test covers what it imports (directly or through other files).
-            </Note>
-            {exampleReport && (
-              <button onClick={() => loadReport(exampleReport.text, exampleReport.name)} className="mt-1.5 px-0.5 text-[11.5px] text-[var(--accent-strong)] hover:underline">
-                Load the sample&apos;s example report ({exampleReport.name})
-              </button>
-            )}
-            {reportNote && <Note tone={reportNote.tone === "error" ? "danger" : "muted"}>{reportNote.text}</Note>}
-            <ul className="mt-1.5 space-y-0.5">
-              {d.tests.map((t) => (
-                <li key={t.id} className="flex items-center gap-2 rounded-md px-1 py-0.5 hover:bg-[var(--hover)]">
-                  <span className="min-w-0 flex-1 truncate font-mono text-[11.5px]" title={`${t.id} — reaches ${t.covers} source files`}>
+      <Heading>Test results</Heading>
+      {d.tests.length === 0 ? (
+        <Note>This project has no test files, so the guess rests on history, size and the AI&apos;s review.</Note>
+      ) : d.failing + d.passing === 0 ? (
+        <Note>
+          {d.tests.length} test {d.tests.length === 1 ? "file" : "files"}, but no results were available to the AI, so tests don&apos;t move the odds.
+        </Note>
+      ) : (
+        <>
+          <Note>
+            {layers.report ? `From ${layers.report.name}: ` : ""}
+            {d.failing} failed, {d.passing} passed{d.tests.length - d.failing - d.passing > 0 ? `, ${d.tests.length - d.failing - d.passing} not known` : ""}.
+          </Note>
+          <ul className="mt-2.5 space-y-1">
+            {d.tests
+              .filter((t) => t.outcome)
+              .map((t) => (
+                <li key={t.id} className="flex items-center gap-2 rounded-md px-1 py-0.5">
+                  <span className="min-w-0 flex-1 truncate font-mono text-[13px]" title={`${t.id} — reaches ${t.covers} source files`}>
                     {relPath(t.id, prefix)}
                   </span>
-                  <span className="shrink-0 text-[10.5px] tabular-nums text-[var(--muted)]" title="source files it reaches">
-                    {t.covers}
-                  </span>
-                  <TriState value={t.outcome} onChange={(v) => setOutcome(t.id, v)} label={t.id} />
+                  <OutcomeIcon outcome={t.outcome!} />
                 </li>
               ))}
-            </ul>
-          </>
-        )}
+          </ul>
+        </>
+      )}
 
-        <Heading>Git history</Heading>
-        {d.history && history ? (
-          <Note>
-            {d.history.commits} {d.history.commits === 1 ? "commit touches" : "commits touch"} these files, {d.history.fixCommits} of them bug fixes
-            {d.history.from && d.history.to
-              ? ` (${new Date(d.history.from * 1000).toLocaleDateString(undefined, { month: "short", year: "numeric" })} – ${new Date(d.history.to * 1000).toLocaleDateString(undefined, { month: "short", year: "numeric" })})`
-              : ""}
-            .{d.history.bulkSkipped > 0 && ` ${d.history.bulkSkipped} bulk ${d.history.bulkSkipped === 1 ? "commit was" : "commits were"} skipped.`}
-            {history.truncated && ` Read the latest ${history.read} commits.`}
-            {history.source === "fixture" && " This sample ships a recorded history (git-log.txt)."}
-          </Note>
-        ) : (
-          <Note>No git history was available, so the prior follows file size only.</Note>
-        )}
-
-        <ModelSettings params={params} onChange={setParams} />
-      </div>
-    </aside>
+      <Heading>History</Heading>
+      {d.history && history ? (
+        <Note>
+          {d.history.commits} {d.history.commits === 1 ? "change touches" : "changes touch"} these files, {d.history.fixCommits} of them bug fixes
+          {d.history.from && d.history.to
+            ? ` (${new Date(d.history.from * 1000).toLocaleDateString(undefined, { month: "short", year: "numeric" })} to ${new Date(d.history.to * 1000).toLocaleDateString(undefined, { month: "short", year: "numeric" })})`
+            : ""}
+          .{d.history.bulkSkipped > 0 && ` ${d.history.bulkSkipped} bulk ${d.history.bulkSkipped === 1 ? "change was" : "changes were"} skipped.`}
+          {history.truncated && ` Only the latest ${history.read} were read.`}
+          {history.source === "fixture" && " This sample ships a recorded history."}
+        </Note>
+      ) : (
+        <Note>No git history was available, so the starting guess follows file size only.</Note>
+      )}
+    </div>
   );
 }

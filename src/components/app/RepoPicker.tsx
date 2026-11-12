@@ -31,26 +31,26 @@ export function RepoPicker({ onPick, busy }: { onPick: (url: string) => void; bu
   }, [repos, query]);
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--panel)]">
-      <header className="flex items-center gap-3 border-b border-[var(--border)] px-4 py-3">
-        <h2 className="text-[13px] font-semibold">Your repositories</h2>
-        {repos && <span className="text-[12px] text-[var(--muted)]">{repos.length}</span>}
+    <section className="overflow-hidden rounded-xl border-[2.5px] border-[var(--ink)] bg-[var(--panel)]">
+      <header className="flex items-center gap-3 border-b-2 border-[var(--ink)] px-4 py-2.5">
+        <h2 className="font-letter text-[17px] font-extrabold">Your repositories</h2>
+        {repos && <span className="text-[14px] text-[var(--muted)]">{repos.length}</span>}
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Filter…"
-          className="ml-auto h-8 w-44 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 text-[13px] outline-none focus:border-[var(--accent)]"
+          className="ml-auto h-9 w-44 rounded-lg border-2 border-[var(--ink)] bg-[var(--paper)] px-2.5 text-[14px] outline-none"
         />
       </header>
       <div className="max-h-[264px] overflow-y-auto">
         {error ? (
-          <p className="px-4 py-6 text-center text-[13px] text-[var(--danger)]">{error}</p>
+          <p className="px-4 py-6 text-center text-[14px] text-[var(--danger)]">{error}</p>
         ) : !repos ? (
-          <p className="flex items-center justify-center gap-2 px-4 py-6 text-[13px] text-[var(--muted)]">
+          <p className="flex items-center justify-center gap-2 px-4 py-6 text-[14px] text-[var(--muted)]">
             <Spinner className="h-4 w-4" /> Loading your repositories…
           </p>
         ) : shown.length === 0 ? (
-          <p className="px-4 py-6 text-center text-[13px] text-[var(--muted)]">No repositories match.</p>
+          <p className="px-4 py-6 text-center text-[14px] text-[var(--muted)]">No repositories match.</p>
         ) : (
           <ul>
             {shown.map((r) => (
@@ -62,16 +62,16 @@ export function RepoPicker({ onPick, busy }: { onPick: (url: string) => void; bu
                 >
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
-                      <span className="truncate text-[13.5px] font-medium">{r.fullName}</span>
+                      <span className="truncate text-[15px] font-bold">{r.fullName}</span>
                       {r.private && (
-                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--border)] px-1.5 text-[10.5px] text-[var(--muted)]">
-                          <Icon.Lock className="h-2.5 w-2.5" /> Private
+                        <span className="inline-flex shrink-0 items-center gap-1 text-[12.5px] text-[var(--muted)]">
+                          <Icon.Lock className="h-3 w-3" /> private
                         </span>
                       )}
                     </span>
-                    {r.description && <span className="mt-0.5 block truncate text-[12px] text-[var(--muted)]">{r.description}</span>}
+                    {r.description && <span className="mt-0.5 block truncate text-[13.5px] text-[var(--muted)]">{r.description}</span>}
                   </span>
-                  <span className="hidden shrink-0 text-right text-[11.5px] text-[var(--muted)] sm:block">
+                  <span className="hidden shrink-0 text-right text-[12.5px] text-[var(--muted)] sm:block">
                     {r.language && <span className="block">{r.language}</span>}
                     {r.pushedAt && <span className="block">{timeAgo(r.pushedAt, loadedAt)}</span>}
                   </span>

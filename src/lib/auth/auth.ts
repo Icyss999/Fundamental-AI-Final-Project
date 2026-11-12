@@ -24,7 +24,7 @@ function authSecret(): string {
  * cookie. Nothing is stored server-side, and the token never reaches browser JavaScript.
  */
 export const auth = betterAuth({
-  appName: "Architecture Mapper",
+  appName: "Kosmos",
   baseURL: process.env.BETTER_AUTH_URL?.trim() || undefined,
   secret: authSecret(),
   socialProviders: githubOAuthConfigured()

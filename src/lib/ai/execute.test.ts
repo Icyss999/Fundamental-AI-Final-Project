@@ -55,7 +55,7 @@ beforeAll(async () => {
     planOptions: { heuristic: "matching", riskWeight: 1 },
     plan: null,
     step: 0,
-    view: { tab: "overview", mode: "structure", selection: null, includeAll: false },
+    view: { mode: "structure", selection: null, includeAll: false },
     diagram: { partition: analysis.partition, labels: analysis.labels },
     grouping: { kind: "folders", folderMQ: partitionMQ(analysis.graph, analysis.partition), clusters: null, ai: null },
     patches: null,
@@ -197,7 +197,7 @@ describe("the AI acting on the app", () => {
     const clustered = await run("cluster_modules");
     expect(clustered.ok).toBe(true);
     expect(clustered.json.mq).toBeGreaterThan(clustered.json.folder_mq as number);
-    expect(calls).toContainEqual(["setGrouping", "clusters", "clusters"]);
+    expect(calls.some(([name]) => name === "setGrouping")).toBe(false); // clusters are never drawn
     const modules = clustered.json.modules as { id: string; files: string[] }[];
     const pricingCluster = modules.find((m) => m.files.includes("src/services/pricing.ts"))!.id;
 
@@ -219,8 +219,6 @@ describe("the AI acting on the app", () => {
     expect(ws.state.diagram.labels["ai-2"]).toBe("Cart & pricing");
     expect(Object.keys(ai.partition).sort()).toEqual(ws.state.analysis.graph.nodes.map((n) => n.id).sort());
 
-    expect((await run("set_grouping", { kind: "folders" })).json.showing).toBe("folders");
-    expect(ws.state.diagram.partition["src/services/pricing.ts"]).toBe("src/services");
   });
 
   it("records a code review that moves the Bayesian ranking", async () => {
@@ -298,7 +296,7 @@ describe("structure and diagram tools", () => {
     expect(brief).toContain("src/services/pricing.ts · ");
     expect(brief).toMatch(/example test report \(test-results\.json\)/);
     const state = appState(snapshot, 0);
-    expect(state).toMatch(/^<app_state>\nTab: Overview\n/);
+    expect(state).toMatch(/^<app_state>\nMode: Structure \(Layer 1\)\n/);
     expect(state).toContain("(the folder-name suggestion), 5 violations");
   });
 });

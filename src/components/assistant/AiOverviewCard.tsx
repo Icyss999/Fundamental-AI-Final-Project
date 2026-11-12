@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Card, Icon, Spinner } from "@/components/app/ui";
+import { Spinner } from "@/components/app/ui";
 import { relPath } from "@/components/layers/format";
 import { describeStep } from "@/lib/change/describe";
 import type { PlanResult } from "@/lib/change/planner";
@@ -10,31 +10,31 @@ import { SEVERITY_WEIGHT, type Review } from "@/lib/diagnose/review";
 import type { StatusState } from "./AssistantPanel";
 import type { Autopilot, StageStatus } from "./useAutopilot";
 
-const SEVERITY_DOT = { high: "bg-[var(--danger)]", medium: "bg-[var(--warn)]", low: "bg-[var(--muted)]" } as const;
+const SEVERITY = { high: "serious", medium: "worth fixing", low: "minor" } as const;
 
-function Column({ title, status, children, action }: { title: string; status?: StageStatus; children: ReactNode; action?: ReactNode }) {
+function Block({ title, status, children, action }: { title: string; status?: StageStatus; children: ReactNode; action?: ReactNode }) {
   return (
-    <div className="flex min-w-0 flex-col rounded-xl bg-[var(--hover)] p-3.5">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">{title}</h3>
+    <div className="border-t-2 border-dashed border-[var(--border)] pt-3 first:border-0 first:pt-0">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <h4 className="text-[14.5px] font-bold">{title}</h4>
         {status === "running" && (
-          <span className="inline-flex items-center gap-1 text-[11px] text-[var(--ai)]">
-            <Spinner className="h-3 w-3" /> working
+          <span className="inline-flex items-center gap-1.5 text-[13px] text-[var(--muted)]">
+            <Spinner className="h-3.5 w-3.5" /> working
           </span>
         )}
-        {(status === "stopped" || status === "error") && <span className="text-[11px] text-[var(--warn)]">{status}</span>}
+        {(status === "stopped" || status === "error") && <span className="text-[13px] font-bold text-[var(--warn)]">{status}</span>}
       </div>
-      <div className="min-h-0 flex-1 text-[12.5px] leading-relaxed">{children}</div>
-      {action && <div className="mt-3">{action}</div>}
+      <div className="text-[14px] leading-relaxed">{children}</div>
+      {action && <div className="mt-2">{action}</div>}
     </div>
   );
 }
 
 function LinkButton(props: React.ComponentProps<"button">) {
-  return <button {...props} className="inline-flex items-center gap-1 text-[12px] font-medium text-[var(--ai)] hover:underline" />;
+  return <button {...props} className="k-link text-[14px]" />;
 }
 
-/** What the AI autopilot made of the project: its architecture, the bugs it found, and the refactoring it planned. */
+/** What the AI's full pass made of the project: the parts it named, the bugs it found, the tidy-up it planned. */
 export function AiOverviewCard({
   status,
   autopilot,
@@ -45,7 +45,6 @@ export function AiOverviewCard({
   plan,
   patches,
   prefix,
-  onRun,
   onShowArchitecture,
   onShowBugs,
   onShowRefactor,
@@ -60,7 +59,6 @@ export function AiOverviewCard({
   plan: PlanResult | null;
   patches: number;
   prefix: string;
-  onRun: () => void;
   onShowArchitecture: () => void;
   onShowBugs: () => void;
   onShowRefactor: () => void;
@@ -68,42 +66,19 @@ export function AiOverviewCard({
 }) {
   const ready = typeof status === "object" && status.configured;
   const stages = autopilot.stages;
-  const hasResults = !!(architecture || review || plan);
-  const title = (
-    <span className="inline-flex items-center gap-1.5">
-      <Icon.Sparkle className="h-4 w-4 text-[var(--ai)]" /> AI autopilot
-    </span>
-  );
+  // A plan the user made themselves is not the AI's work; it shows only once the AI has done something.
+  const hasResults = !!(architecture || review);
 
   if (!ready) {
     return (
-      <Card title={title}>
-        <p className="text-[13px] text-[var(--muted)]">
-          {status === "loading" ? "Connecting to the assistant…" : "Add DEEPSEEK_API_KEY to .env.local to let the AI rearrange the diagram, hunt for bugs and plan the refactoring."}
-        </p>
-      </Card>
+      <p className="text-[14px] leading-relaxed text-[var(--muted)]">
+        {status === "loading" ? "Connecting to the AI…" : "Add DEEPSEEK_API_KEY to .env.local and the AI can sort the files into named parts, look for bugs and plan a tidy-up."}
+      </p>
     );
   }
 
-  const action = autopilot.running ? (
-    <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--ai)]">
-      <Spinner className="h-3.5 w-3.5" /> Running…
-    </span>
-  ) : (
-    <button onClick={onRun} className="rounded-lg bg-[var(--ai)] px-3 py-1 text-[12.5px] font-medium text-white hover:brightness-110">
-      {hasResults ? "Run again" : "Run autopilot"}
-    </button>
-  );
-
   if (!hasResults && !stages) {
-    return (
-      <Card title={title} action={action}>
-        <p className="text-[13px] leading-relaxed text-[var(--muted)]">
-          Let the AI take over: it rearranges the diagram into the project&apos;s real architecture (MQ clustering, then named modules and tiers), reviews the riskiest code for bugs (findings feed the
-          Bayesian ranking), and plans the refactoring with A* — with a patch for every step.
-        </p>
-      </Card>
-    );
+    return <p className="text-[14.5px] leading-relaxed text-[var(--muted)]">The AI didn&apos;t work on this project, so the map shows Kosmos&apos;s own results: folders, a guess from the history, and rules from the folder names.</p>;
   }
 
   const findings = review ? [...review.findings].sort((a, b) => SEVERITY_WEIGHT[b.severity] - SEVERITY_WEIGHT[a.severity]) : [];
@@ -114,97 +89,83 @@ export function AiOverviewCard({
     : [];
 
   return (
-    <Card title={title} action={action}>
-      <div className="grid gap-3 md:grid-cols-3">
-        <Column
-          title="Architecture"
-          status={stages?.organize}
-          action={architecture && <LinkButton onClick={onShowArchitecture}>Show in the diagram →</LinkButton>}
-        >
-          {architecture ? (
+    <div className="space-y-3">
+      <Block title="The parts it named" status={stages?.organize} action={architecture && <LinkButton onClick={onShowArchitecture}>Show them on the map</LinkButton>}>
+        {architecture ? (
+          <>
+            <ul className="space-y-1">
+              {modules.slice(0, 8).map((m) => (
+                <li key={m.id}>
+                  <b>{m.name}</b>
+                  <span className="text-[var(--muted)]">
+                    {" "}
+                    · {m.files} {m.files === 1 ? "file" : "files"}
+                    {m.purpose ? `: ${m.purpose}` : ""}
+                  </span>
+                </li>
+              ))}
+              {modules.length > 8 && <li className="text-[var(--muted)]">and {modules.length - 8} more</li>}
+            </ul>
+            <p className="mt-1.5 text-[13px] text-[var(--muted)]" title="MQ: how cleanly files split into groups. Higher is tidier.">
+              Tidiness {architecture.mq.toFixed(2)}, against {folderMQ.toFixed(2)} for the folders{clustersMQ !== null && ` and ${clustersMQ.toFixed(2)} for the clusters`}.
+            </p>
+          </>
+        ) : (
+          <p className="text-[var(--muted)]">{stages?.organize === "running" ? "Sorting and naming…" : "Not done yet."}</p>
+        )}
+      </Block>
+
+      <Block title="Bugs it found" status={stages?.bugs} action={review && <LinkButton onClick={onShowBugs}>Open Bug risk</LinkButton>}>
+        {review ? (
+          findings.length > 0 ? (
+            <ul className="space-y-1.5">
+              {findings.slice(0, 4).map((f, i) => (
+                <li key={i}>
+                  <span className="block leading-snug">
+                    {f.title} <span className={f.severity === "high" ? "font-bold text-[var(--danger)]" : "text-[var(--muted)]"}>({SEVERITY[f.severity]})</span>
+                  </span>
+                  <button onClick={() => onFocusFile(f.file)} className="block max-w-full truncate font-mono text-[13px] text-[var(--muted)] underline decoration-[1.5px] underline-offset-2">
+                    {relPath(f.file, prefix)}
+                    {f.line ? `:${f.line}` : ""}
+                  </button>
+                </li>
+              ))}
+              <li className="text-[13px] text-[var(--muted)]">
+                {findings.length} {findings.length === 1 ? "finding" : "findings"} in {review.reviewed.length} files read.
+              </li>
+            </ul>
+          ) : (
+            <p className="text-[var(--muted)]">It read {review.reviewed.length} files and found nothing wrong.</p>
+          )
+        ) : (
+          <p className="text-[var(--muted)]">{stages?.bugs === "running" ? "Reading the riskiest files…" : "Not done yet."}</p>
+        )}
+      </Block>
+
+      <Block title="The tidy-up plan" status={stages?.refactor} action={plan && <LinkButton onClick={onShowRefactor}>Open Refactor</LinkButton>}>
+        {plan ? (
+          plan.steps.length > 0 ? (
             <>
-              <ul className="space-y-1">
-                {modules.slice(0, 8).map((m) => (
-                  <li key={m.id} className="min-w-0">
-                    <span className="mr-1.5 rounded bg-[var(--panel)] px-1 font-mono text-[10px] text-[var(--muted)]" title="Tier: 0 is the top of the diagram">
-                      {m.tier}
-                    </span>
-                    <span className="font-medium">{m.name}</span>
-                    <span className="text-[var(--muted)]">
-                      {" "}
-                      · {m.files} {m.files === 1 ? "file" : "files"}
-                      {m.purpose ? ` — ${m.purpose}` : ""}
-                    </span>
+              <p>
+                {plan.steps.length} {plan.steps.length === 1 ? "step" : "steps"}, fixing {plan.initialViolations.length - plan.finalViolations.length} of {plan.initialViolations.length} rule breaks;{" "}
+                {patches} with code changes.
+              </p>
+              <ol className="mt-1 list-decimal space-y-0.5 pl-5 text-[13.5px] text-[var(--muted)]">
+                {plan.steps.slice(0, 5).map((s, i) => (
+                  <li key={i} className="truncate" title={describeStep(s, prefix)}>
+                    {describeStep(s, prefix)}
                   </li>
                 ))}
-                {modules.length > 8 && <li className="text-[var(--muted)]">+ {modules.length - 8} more</li>}
-              </ul>
-              <p className="mt-2 text-[11.5px] text-[var(--muted)]" title="TurboMQ: higher = more cohesive modules with fewer imports between them">
-                MQ {architecture.mq.toFixed(2)}
-                {clustersMQ !== null && ` · clusters ${clustersMQ.toFixed(2)}`} · folders {folderMQ.toFixed(2)}
-              </p>
+              </ol>
             </>
           ) : (
-            <p className="text-[var(--muted)]">{stages?.organize === "running" ? "Clustering and naming modules…" : "Not organised yet."}</p>
-          )}
-        </Column>
+            <p className="text-[var(--muted)]">The code already follows the rules. Nothing to tidy.</p>
+          )
+        ) : (
+          <p className="text-[var(--muted)]">{stages?.refactor === "running" ? "Writing rules and planning…" : "Not done yet."}</p>
+        )}
+      </Block>
 
-        <Column title="Bugs" status={stages?.bugs} action={review && <LinkButton onClick={onShowBugs}>Open Bug risk →</LinkButton>}>
-          {review ? (
-            findings.length > 0 ? (
-              <>
-                <ul className="space-y-1.5">
-                  {findings.slice(0, 4).map((f, i) => (
-                    <li key={i} className="flex min-w-0 items-start gap-2">
-                      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${SEVERITY_DOT[f.severity]}`} />
-                      <span className="min-w-0">
-                        <span className="block leading-snug">{f.title}</span>
-                        <button onClick={() => onFocusFile(f.file)} className="block truncate font-mono text-[11px] text-[var(--muted)] hover:text-[var(--ai)]">
-                          {relPath(f.file, prefix)}
-                          {f.line ? `:${f.line}` : ""}
-                        </button>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-2 text-[11.5px] text-[var(--muted)]">
-                  {findings.length} {findings.length === 1 ? "finding" : "findings"} in {review.reviewed.length} files read
-                </p>
-              </>
-            ) : (
-              <p className="text-[var(--muted)]">Reviewed {review.reviewed.length} files and found no problems.</p>
-            )
-          ) : (
-            <p className="text-[var(--muted)]">{stages?.bugs === "running" ? "Reading the riskiest files…" : "Not reviewed yet."}</p>
-          )}
-        </Column>
-
-        <Column title="Refactoring" status={stages?.refactor} action={plan && <LinkButton onClick={onShowRefactor}>Open Refactor →</LinkButton>}>
-          {plan ? (
-            plan.steps.length > 0 ? (
-              <>
-                <p>
-                  {plan.steps.length} {plan.steps.length === 1 ? "step" : "steps"}, cost {plan.cost.toFixed(2)} · fixes {plan.initialViolations.length - plan.finalViolations.length} of {plan.initialViolations.length} violations
-                </p>
-                <ol className="mt-1.5 list-decimal space-y-0.5 pl-4 text-[12px] text-[var(--muted)]">
-                  {plan.steps.slice(0, 5).map((s, i) => (
-                    <li key={i} className="truncate" title={describeStep(s, prefix)}>
-                      {describeStep(s, prefix)}
-                    </li>
-                  ))}
-                </ol>
-                <p className="mt-2 text-[11.5px] text-[var(--muted)]">
-                  {patches} of {plan.steps.length} steps have a patch
-                </p>
-              </>
-            ) : (
-              <p className="text-[var(--muted)]">The code already follows the rules — nothing to refactor.</p>
-            )
-          ) : (
-            <p className="text-[var(--muted)]">{stages?.refactor === "running" ? "Writing rules and planning…" : "No plan yet."}</p>
-          )}
-        </Column>
-      </div>
-    </Card>
+    </div>
   );
 }

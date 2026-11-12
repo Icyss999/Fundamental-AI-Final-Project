@@ -1,32 +1,4 @@
-import type { ReactNode, SVGProps } from "react";
-
-export function Card({ title, action, children, className = "" }: { title?: ReactNode; action?: ReactNode; children: ReactNode; className?: string }) {
-  return (
-    <section className={`rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-5 shadow-[0_1px_2px_rgb(0_0_0/0.04)] ${className}`}>
-      {(title || action) && (
-        <header className="mb-4 flex items-center justify-between gap-3">
-          {title && <h2 className="text-[13px] font-semibold tracking-tight text-[var(--foreground)]">{title}</h2>}
-          {action}
-        </header>
-      )}
-      {children}
-    </section>
-  );
-}
-
-export function Chip({ children, tone = "neutral", title }: { children: ReactNode; tone?: "neutral" | "accent" | "danger" | "warn"; title?: string }) {
-  const tones = {
-    neutral: "bg-[var(--hover)] text-[var(--foreground)]",
-    accent: "bg-[var(--accent-soft)] text-[var(--accent-strong)]",
-    danger: "bg-[var(--danger-soft)] text-[var(--danger)]",
-    warn: "bg-[var(--warn-soft)] text-[var(--warn)]",
-  };
-  return (
-    <span title={title} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[12px] font-medium ${tones[tone]}`}>
-      {children}
-    </span>
-  );
-}
+import type { SVGProps } from "react";
 
 export function Spinner({ className = "h-4 w-4" }: { className?: string }) {
   return (
@@ -130,6 +102,23 @@ export const Icon = {
       <path d="M10.5 5.5V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2" />
     </svg>
   ),
+  Plus: (p: IconProps) => (
+    <svg {...base} strokeWidth={2} {...p}>
+      <path d="M8 3v10M3 8h10" />
+    </svg>
+  ),
+  Info: (p: IconProps) => (
+    <svg {...base} {...p}>
+      <circle cx="8" cy="8" r="6.25" />
+      <path d="M8 7.25v4M8 4.75v.01" strokeWidth={2} />
+    </svg>
+  ),
+  /** A speech balloon: talking to Kosmos. */
+  Balloon: (p: IconProps) => (
+    <svg {...base} strokeWidth={1.8} {...p}>
+      <path d="M4 2.5h8A2.5 2.5 0 0 1 14.5 5v4A2.5 2.5 0 0 1 12 11.5H7.5L4 14.25l.75-2.75H4A2.5 2.5 0 0 1 1.5 9V5A2.5 2.5 0 0 1 4 2.5z" />
+    </svg>
+  ),
   Alert: (p: IconProps) => (
     <svg {...base} {...p}>
       <path d="M8 1.75L14.5 13.5h-13L8 1.75zM8 6.25v3M8 11.25v.01" />
@@ -137,17 +126,32 @@ export const Icon = {
   ),
 };
 
-/** Small mark: three linked modules. */
-export function Logo({ className = "h-7 w-7" }: { className?: string }) {
+const BALLOON = "M8 2.5h16a5.5 5.5 0 0 1 5.5 5.5v10a5.5 5.5 0 0 1-5.5 5.5H14.5l-7 6 1.6-6H8A5.5 5.5 0 0 1 2.5 18V8A5.5 5.5 0 0 1 8 2.5z";
+
+/**
+ * The Kosmos mark: a speech balloon holding a tidy 2×2 grid (kosmos: order), one square inked in.
+ * Inside a `group/mark` element, hovering slips a cyan plate out from behind, like a misprinted panel.
+ */
+export function Logo({ className = "h-8 w-8" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 32 32" fill="none" aria-hidden>
-      <rect x="1.5" y="1.5" width="29" height="29" rx="8" fill="var(--accent)" />
-      <rect x="11" y="6.5" width="10" height="6" rx="1.8" fill="white" />
-      <rect x="5.5" y="19.5" width="9" height="6" rx="1.8" fill="white" fillOpacity="0.9" />
-      <rect x="17.5" y="19.5" width="9" height="6" rx="1.8" fill="white" fillOpacity="0.9" />
-      <path d="M16 12.5v3.5M10 19.5v-1.75a1.75 1.75 0 0 1 1.75-1.75h8.5A1.75 1.75 0 0 1 22 17.75v1.75" stroke="white" strokeWidth="1.6" strokeLinecap="round" />
+    <svg className={`overflow-visible ${className}`} viewBox="0 0 32 32" fill="none" aria-hidden>
+      <path
+        d={BALLOON}
+        fill="var(--cyan)"
+        className="transition-transform duration-200 ease-[var(--ease-out)] group-hover/mark:translate-x-[2.5px] group-hover/mark:translate-y-[2.5px] motion-reduce:transition-none"
+      />
+      <path d={BALLOON} fill="var(--yel)" stroke="var(--on-yel)" strokeWidth="2.2" strokeLinejoin="round" />
+      <rect x="9.5" y="6.5" width="5.6" height="5.6" rx="1.2" fill="var(--on-yel)" />
+      <rect x="16.9" y="6.5" width="5.6" height="5.6" rx="1.2" fill="#fff" stroke="var(--on-yel)" strokeWidth="1.7" />
+      <rect x="9.5" y="13.9" width="5.6" height="5.6" rx="1.2" fill="#fff" stroke="var(--on-yel)" strokeWidth="1.7" />
+      <rect x="16.9" y="13.9" width="5.6" height="5.6" rx="1.2" fill="#fff" stroke="var(--on-yel)" strokeWidth="1.7" />
     </svg>
   );
+}
+
+/** The name, lettered. */
+export function Wordmark({ className = "" }: { className?: string }) {
+  return <span className={`font-letter font-extrabold tracking-[-0.01em] ${className}`}>Kosmos</span>;
 }
 
 export function formatCount(n: number): string {

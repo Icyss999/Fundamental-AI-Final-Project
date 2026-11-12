@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ViewNode } from "@/lib/graph/view";
-import { applyPins, layoutView } from "./layout";
+import { layoutView, wrapEdges } from "./layout";
 
 const base = { fileCount: 1, loc: 10, color: 0, god: false, inCycle: false };
 const viewNodes: ViewNode[] = [
@@ -40,35 +40,38 @@ describe("layoutView", () => {
   });
 });
 
-describe("applyPins", () => {
-  const nodes = [
-    { id: "m:ui", position: { x: 0, y: 0 }, width: 200, height: 100 },
-    { id: "f:a", parentId: "m:ui", position: { x: 16, y: 40 }, width: 120, height: 34 },
-    { id: "m:data", position: { x: 0, y: 200 }, width: 160, height: 60 },
-  ];
+describe("organised layout", () => {
+  const mod = (id: string): ViewNode => ({ id: `m:${id}`, kind: "module", label: id, module: id, ...base });
+  const edge = (a: string, b: string) => ({ id: `m:${a}->m:${b}`, source: `m:${a}`, target: `m:${b}`, weight: 1, inCycle: false, typeOnly: false, members: [] });
 
-  it("restores dragged positions and leaves the rest alone", () => {
-    const out = applyPins(nodes, new Map([["m:data", { x: 500, y: 20 }]]));
-    expect(out.find((n) => n.id === "m:data")!.position).toEqual({ x: 500, y: 20 });
-    expect(out.find((n) => n.id === "m:ui")!.position).toEqual({ x: 0, y: 0 });
-    expect(nodes[2].position).toEqual({ x: 0, y: 200 }); // input not mutated
+  it("puts shelves under the map, full width and in order, and keeps a loop pair side by side", async () => {
+    const nodes = ["pages", "components", "state", "services", "data", "lib"].map(mod);
+    const edges = [edge("pages", "components"), edge("pages", "state"), edge("pages", "services"), edge("components", "state"), edge("state", "services"), edge("services", "state"), edge("pages", "data"), edge("pages", "lib"), edge("data", "lib")];
+    const { boxes, routes } = await layoutView(nodes, edges, { shelves: ["data", "lib"], pairs: [["services", "state"]] });
+    const b = (id: string) => boxes.get(`m:${id}`)!;
+    const mapBottom = Math.max(...["pages", "components", "state", "services"].map((m) => b(m).y + b(m).height));
+    const mapLeft = Math.min(...["pages", "components", "state", "services"].map((m) => b(m).x));
+    const mapRight = Math.max(...["pages", "components", "state", "services"].map((m) => b(m).x + b(m).width));
+    // Shelves: below everything on the map, as wide as the map, data above lib.
+    expect(b("data").y).toBeGreaterThan(mapBottom);
+    expect(b("lib").y).toBeGreaterThan(b("data").y + b("data").height);
+    expect(b("data").x).toBe(mapLeft);
+    expect(b("data").width).toBeGreaterThanOrEqual(mapRight - mapLeft);
+    // The pair shares a row, side by side, and its two-way imports are left to the loop arrow.
+    expect(b("state").y).toBe(b("services").y);
+    expect(Math.abs(b("state").x - b("services").x)).toBeGreaterThanOrEqual(b("state").width);
+    expect(routes.has("m:state->m:services")).toBe(false);
+    expect(routes.has("m:pages->m:components")).toBe(true);
+    // Shelf edges are not routed either (they are drawn on focus).
+    expect(routes.has("m:pages->m:data")).toBe(false);
+    // Boxes in a row share a width.
+    expect(new Set(["pages", "components", "state", "services"].map((m) => b(m).width)).size).toBe(1);
   });
 
-  it("pushes an auto-placed node clear of a pinned node it would sit under", () => {
-    // User dragged m:data onto the spot ELK gave m:ui.
-    const out = applyPins(nodes, new Map([["m:data", { x: 50, y: 10 }]]));
-    const ui = out.find((n) => n.id === "m:ui")!;
-    const data = out.find((n) => n.id === "m:data")!;
-    expect(data.position).toEqual({ x: 50, y: 10 }); // pinned node never moves
-    expect(ui.position.x).toBeGreaterThanOrEqual(50 + 160); // pushed to the right of it
-    expect(ui.position.y).toBe(0); // stays in its layer
-  });
-
-  it("grows a group so a pinned child still fits inside it", () => {
-    const out = applyPins(nodes, new Map([["f:a", { x: 300, y: 150 }]]));
-    const group = out.find((n) => n.id === "m:ui")!;
-    expect(group.width).toBe(300 + 120 + 20);
-    expect(group.height).toBe(150 + 34 + 20);
-    expect(nodes[0].width).toBe(200); // input not mutated
+  it("wraps a wide row of files into a grid", () => {
+    const kids = ["a", "b", "c", "d", "e", "f", "g"];
+    expect(wrapEdges(kids, [], 3)).toEqual([["a", "d"], ["b", "e"], ["c", "f"], ["d", "g"]]);
+    // Files at different dependency levels are already stacked; only same-level rows wrap.
+    expect(wrapEdges(["a", "b", "c"], [["a", "b"], ["b", "c"]], 2)).toEqual([]);
   });
 });

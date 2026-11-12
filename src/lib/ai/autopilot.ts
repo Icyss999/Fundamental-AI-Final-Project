@@ -17,10 +17,10 @@ export const AUTOPILOT_STAGES: AutopilotStage[] = [
   {
     id: "organize",
     title: "Organize the diagram",
-    rounds: 12,
-    prompt: `Autopilot, stage 1 of 3 — rearrange the diagram into this project's real architecture.
-Run cluster_modules (annealing) for the structural clusters. Then call set_architecture with 3–12 modules a developer would recognise, built from those clusters (merge, split, move misfits; read a file only if its role is unclear), each with a short name, a one-line purpose and a tier (0 = entry points/UI at the top, increasing towards shared foundations). Every source file must land in a module.
-Then reply in 2–4 sentences: how the codebase is organised, and how your modules' MQ compares with the clusters and the folders.`,
+    rounds: 6,
+    prompt: `Autopilot, stage 1 of 3 — rearrange the diagram into this project's main parts. The user is waiting for this map, so be quick: two tool calls, no file reading.
+Run cluster_modules (annealing). Then call set_architecture once with 3–7 parts a newcomer would understand, built from the clusters and folders, each with a short plain name, a one-line purpose, a tier (0 = entry points/UI at the top, increasing towards shared foundations) and a kind (ui, entry, logic, data, shared, external or config: the map draws each kind as its own shape). Every source file must land in a part.
+Then reply in one sentence: how the codebase is organised.`,
   },
   {
     id: "bugs",

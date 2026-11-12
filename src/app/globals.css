@@ -1,112 +1,400 @@
 @import "tailwindcss";
 
+/*
+ * Kosmos: a comic page. White bristol board, India-ink outlines, flat process colours, tints as dots.
+ * Dark theme: the same page at night (ink-navy ground, off-white ink, the same inks a step lighter).
+ * The older token names (--panel, --border, --accent…) stay as aliases so every part reads one palette.
+ */
 :root {
-  --background: #fafafa;
-  --foreground: #18181b;
-  --panel: #ffffff;
-  --canvas: #f6f6f7;
-  --border: #e6e6e9;
-  --hover: #f2f2f4;
-  --muted: #6b6b76;
-  --accent: #3b82f6;
-  --accent-strong: #2563eb;
-  --accent-soft: #e6efff;
+  --paper: #ffffff;
+  --gutter: #f4f2ed;
+  --ink: #17161c;
+  --ink-soft: #55535e;
+  --yel: #ffd84d;
+  --yel-soft: #fff3c7;
+  /* Text on yellow is always dark ink, in both themes. */
+  --on-yel: #17161c;
+  --cyan: #1e9bd7;
+  --red: #d62f32;
+  --green: #15803d;
+
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --panel: var(--paper);
+  --canvas: var(--paper);
+  --border: #dedbd3;
+  --hover: #f4f2ed;
+  --muted: var(--ink-soft);
+  --accent: var(--cyan);
+  --accent-strong: #0e6b9b;
+  --accent-soft: #dcf0fa;
 
   --module-bg: #ffffff;
   --file-bg: #ffffff;
-  --node-border: #dcdce1;
+  --node-border: var(--ink);
 
-  --danger: #dc2626;
-  --danger-soft: #fdeaea;
-  --warn: #b45309;
-  --warn-soft: #fdf3dc;
+  --danger: var(--red);
+  --danger-soft: #fde4e4;
+  --warn: #a8530a;
+  --warn-soft: #fdf0d6;
 
-  /* Bug-risk heat (one sequential hue) and refactoring-plan additions. */
-  --heat: #eb6834;
-  --added: #16a34a;
-  --added-soft: #e3f6e8;
-  /* The AI assistant: its panel accents and the files it highlights in the diagram. */
-  --ai: #7c3aed;
-  --ai-soft: #f1ebff;
+  /* Bug-risk dots (printed in the red ink), plan additions, and what the AI points at. */
+  --heat: var(--red);
+  --added: var(--green);
+  --added-soft: #ddf3e4;
+  --ai: var(--cyan);
+  --ai-soft: #dcf0fa;
 
-  /* Module family colours (diagram stripes, overview dots). */
-  --c0: #3b82f6;
-  --c1: #10b981;
-  --c2: #8b5cf6;
-  --c3: #f59e0b;
-  --c4: #ec4899;
-  --c5: #06b6d4;
-  --c6: #84cc16;
-  --c7: #f97316;
+  /* Module families: flat process tints. Boxes are filled with a light mix of these. */
+  --c0: #f2c230;
+  --c1: #3fa7dc;
+  --c2: #ef7f94;
+  --c3: #7cc152;
+  --c4: #f39a4f;
+  --c5: #9d86e6;
+  --c6: #4cc3b0;
+  --c7: #d98ad6;
+
+  /* Hard ink shadow for things you press; motion tokens (references/motion.md). */
+  --press: 3px 3px 0 var(--ink);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --dur-press: 120ms;
+  --dur-micro: 160ms;
+  --dur-small: 200ms;
+  --dur-medium: 280ms;
+  --dur-large: 380ms;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #09090b;
-    --foreground: #ececef;
-    --panel: #111114;
-    --canvas: #0c0c0f;
-    --border: #26262b;
-    --hover: #1b1b20;
-    --muted: #9d9da8;
-    --accent: #3b82f6;
-    --accent-strong: #60a5fa;
-    --accent-soft: rgb(59 130 246 / 0.16);
+    color-scheme: dark;
+    --paper: #1b1a22;
+    --gutter: #121117;
+    --ink: #efece4;
+    --ink-soft: #b8b5ad;
+    --yel-soft: #3a3320;
+    --cyan: #5cc0ef;
+    --red: #ff6b6b;
+    --green: #4ade80;
 
-    --module-bg: #17171b;
-    --file-bg: #1c1c21;
-    --node-border: #34343b;
+    --background: var(--gutter);
+    --canvas: #16151c;
+    --border: #3a3842;
+    --hover: #26252e;
+    --accent-strong: #8fd3f5;
+    --accent-soft: rgb(92 192 239 / 0.16);
 
-    --danger: #f87171;
-    --danger-soft: rgb(220 38 38 / 0.16);
-    --warn: #fbbf24;
-    --warn-soft: rgb(245 158 11 / 0.16);
+    --module-bg: #1f1e27;
+    --file-bg: #24232c;
 
-    --heat: #f07a45;
-    --added: #4ade80;
-    --added-soft: rgb(34 197 94 / 0.16);
-    --ai: #a78bfa;
-    --ai-soft: rgb(139 92 246 / 0.18);
+    --danger-soft: rgb(255 107 107 / 0.16);
+    --warn: #f5b04a;
+    --warn-soft: rgb(245 176 74 / 0.16);
+    --added-soft: rgb(74 222 128 / 0.15);
+    --ai-soft: rgb(92 192 239 / 0.16);
 
-    --c0: #60a5fa;
-    --c1: #34d399;
-    --c2: #a78bfa;
-    --c3: #fbbf24;
-    --c4: #f472b6;
-    --c5: #22d3ee;
-    --c6: #a3e635;
-    --c7: #fb923c;
+    --c0: #e6b62a;
+    --c1: #4fb3e6;
+    --c2: #f28aa0;
+    --c3: #86cc5c;
+    --c4: #f5a35e;
+    --c5: #a893ee;
+    --c6: #5acdb9;
+    --c7: #e096dc;
   }
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-atkinson);
+  --font-mono: var(--font-atkinson-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
+  font-size: 16px;
 }
 
-/* React Flow: let the canvas colour come from our tokens in both themes. */
+/* Lettering: Shantell Sans, the comic voice — for the name, headings and the narrator. */
+.font-letter {
+  font-family: var(--font-shantell), var(--font-atkinson), system-ui, sans-serif;
+}
+
+/* Focus is always a visible ring, never only a hover shade (in the base layer, so a part can restyle it). */
+@layer base {
+  :focus-visible {
+    outline: 2.5px solid var(--cyan);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* A button you press: ink outline; the main action casts a hard shadow and presses into it. */
+  .k-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 40px;
+    padding: 0 16px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    background: var(--paper);
+    color: var(--ink);
+    font-weight: 700;
+    font-size: 15px;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      transform var(--dur-press) var(--ease-out),
+      box-shadow var(--dur-press) var(--ease-out),
+      background-color var(--dur-micro) ease;
+  }
+  .k-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .k-btn-primary {
+    background: var(--ink);
+    color: var(--paper);
+  }
+  .k-btn-yellow {
+    background: var(--yel);
+    color: var(--on-yel);
+    border-color: var(--on-yel);
+  }
+  .k-btn-press {
+    box-shadow: var(--press);
+  }
+  .k-btn-press:active:not(:disabled) {
+    transform: translate(3px, 3px);
+    box-shadow: 0 0 0 var(--ink);
+  }
+  .k-btn:active:not(:disabled):not(.k-btn-press) {
+    transform: scale(0.97);
+  }
+  .k-btn-small {
+    height: 32px;
+    padding: 0 12px;
+    font-size: 14px;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .k-btn:not(.k-btn-primary):not(.k-btn-yellow):hover:not(:disabled) {
+      background: var(--hover);
+    }
+  }
+  /* The main action on a yellow narration box: dark ink in both themes, yellow lettering. */
+  .k-btn-ink {
+    background: var(--on-yel);
+    color: var(--yel);
+    border-color: var(--on-yel);
+  }
+  .k-btn-ink.k-btn-press {
+    box-shadow: 3px 3px 0 color-mix(in srgb, var(--on-yel) 45%, transparent);
+  }
+  /* The map's mode tabs: the active mode is printed in the narration yellow. */
+  .k-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 36px;
+    padding: 0 14px;
+    border: 2px solid transparent;
+    border-radius: 7px;
+    font-weight: 700;
+    font-size: 15px;
+    white-space: nowrap;
+    color: var(--ink-soft);
+    transition:
+      background-color var(--dur-micro) ease,
+      color var(--dur-micro) ease;
+  }
+  .k-tab[aria-selected="true"] {
+    background: var(--yel);
+    color: var(--on-yel);
+    border-color: var(--on-yel);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .k-tab:not([aria-selected="true"]):hover {
+      color: var(--ink);
+      background: var(--hover);
+    }
+  }
+  /* A plain text action, underlined like a link. */
+  .k-link {
+    font-weight: 700;
+    color: var(--ink);
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 3px;
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+  }
+  .k-link:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+/* React Flow: the canvas colour comes from our tokens in both themes. */
 .react-flow {
   --xy-background-color: var(--canvas);
-  --xy-background-pattern-color: var(--node-border);
+  --xy-background-pattern-color: var(--border);
 }
 
-/* Plan playback: boxes glide to their new places after each step's re-layout. */
+/* Plan playback and regrouping: boxes glide to their new places after a re-layout. */
 .rf-animate .react-flow__node:not(.dragging) {
-  transition:
-    transform 480ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    width 480ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    height 480ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform 420ms var(--ease-in-out);
+}
+
+/* The map assembles once, the first time a project opens: each box pops into place. */
+@keyframes k-pop {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* `backwards`, not `both`: once in place, a box must still be able to fade when something else is in focus. */
+.k-enter {
+  animation: k-pop 420ms var(--ease-out) backwards;
+}
+
+/* Side panels slide in over the map from the right (up from the bottom on phones). */
+@keyframes k-sheet-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes k-sheet-up {
+  from {
+    transform: translateY(32px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+.k-sheet {
+  animation: k-sheet-in var(--dur-large) var(--ease-drawer) both;
+}
+@media (max-width: 767px) {
+  .k-sheet {
+    animation-name: k-sheet-up;
+  }
+}
+@keyframes k-fade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.k-fade {
+  animation: k-fade var(--dur-medium) var(--ease-out) both;
+}
+@keyframes k-fade-only {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* The step being worked on: its dots drift, like ink still wet. */
+.k-halftone-live {
+  background-image: radial-gradient(circle, color-mix(in srgb, var(--on-yel) 20%, transparent) 1.2px, transparent 1.7px);
+  background-size: 8px 8px;
+  animation: k-dots 1.4s linear infinite;
+}
+@keyframes k-dots {
+  to {
+    background-position: 8px 8px;
+  }
+}
+
+/* "All tidy!": a starburst stamped onto the narration box once nothing breaks the rules. */
+@keyframes k-stamp {
+  0% {
+    opacity: 0;
+    transform: rotate(8deg) scale(1.5);
+  }
+  60% {
+    opacity: 1;
+    transform: rotate(8deg) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: rotate(8deg) scale(1);
+  }
+}
+.k-stamp {
+  transform: rotate(8deg);
+  animation: k-stamp 340ms var(--ease-out) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .k-stamp {
+    animation: k-fade-only var(--dur-small) ease both;
+  }
+  .k-halftone-live {
+    animation: none;
+  }
+  .k-enter,
+  .k-sheet,
+  .k-fade {
+    animation-name: k-fade-only;
+    animation-duration: var(--dur-small);
+  }
+  .rf-animate .react-flow__node:not(.dragging) {
+    transition: none;
+  }
+  .k-btn {
+    transition: none;
+  }
 }
 
 /* Boxes can be dragged; show a grabbing hand while one is moving. */
 .react-flow__node.dragging,
 .react-flow__node.dragging * {
   cursor: grabbing !important;
+}
+
+/* Bug risk printed as halftone: the denser the dots, the likelier the bug (--dot runs 0..1). */
+.k-halftone {
+  background-image: radial-gradient(circle, var(--heat) calc(var(--dot, 0) * 1.8px + 0.3px), transparent calc(var(--dot, 0) * 1.8px + 0.8px));
+  background-size: 7px 7px;
+}
+/* Labels on a dotted box keep a paper halo, so the dots never eat the words. */
+.k-halo,
+.k-halftone ~ * {
+  text-shadow:
+    1px 0 0 var(--paper),
+    -1px 0 0 var(--paper),
+    0 1px 0 var(--paper),
+    0 -1px 0 var(--paper),
+    1px 1px 0 var(--paper),
+    -1px -1px 0 var(--paper),
+    1px -1px 0 var(--paper),
+    -1px 1px 0 var(--paper),
+    0 0 6px var(--paper);
 }

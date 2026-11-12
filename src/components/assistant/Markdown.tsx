@@ -133,7 +133,7 @@ function Inline({ text, ctx }: { text: string; ctx: Ctx }) {
             key={key}
             onClick={() => ctx.onTarget(target)}
             title={target.type === "file" ? `Show ${target.id} in the diagram` : `Show module ${code} in the diagram`}
-            className="rounded bg-[var(--ai-soft)] px-1 py-px font-mono text-[0.9em] text-[var(--ai)] hover:underline"
+            className="rounded-[4px] border-[1.5px] border-[var(--ink)] bg-[var(--yel-soft)] px-1 font-mono text-[0.88em] font-bold hover:bg-[var(--yel)] hover:text-[var(--on-yel)]"
           >
             {code}
           </button>
@@ -145,7 +145,7 @@ function Inline({ text, ctx }: { text: string; ctx: Ctx }) {
       );
     } else if (m[3] !== undefined || m[4] !== undefined) {
       out.push(
-        <strong key={key} className="font-semibold">
+        <strong key={key} className="font-bold">
           <Inline text={m[3] ?? m[4]} ctx={ctx} />
         </strong>,
       );
@@ -157,7 +157,7 @@ function Inline({ text, ctx }: { text: string; ctx: Ctx }) {
       );
     } else {
       out.push(
-        <a key={key} href={m[8]} target="_blank" rel="noreferrer" className="text-[var(--accent-strong)] underline-offset-2 hover:underline">
+        <a key={key} href={m[8]} target="_blank" rel="noreferrer" className="font-bold underline decoration-2 underline-offset-[3px]">
           {m[7]}
         </a>,
       );
@@ -189,15 +189,15 @@ export function CodeBlock({ lang, text }: { lang: string; text: string }) {
     }
   };
   return (
-    <div className="my-2 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--canvas)]">
-      <div className="flex items-center justify-between border-b border-[var(--border)] px-2.5 py-1">
-        <span className="font-mono text-[10.5px] text-[var(--muted)]">{lang || "code"}</span>
-        <button onClick={copy} className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px] text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--foreground)]">
+    <div className="my-2 overflow-hidden rounded-lg border-2 border-[var(--ink)] bg-[var(--canvas)]">
+      <div className="flex items-center justify-between border-b-2 border-[var(--ink)] px-2.5 py-1">
+        <span className="font-mono text-[12px] text-[var(--muted)]">{lang || "code"}</span>
+        <button onClick={copy} className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[12.5px] font-bold text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--foreground)]">
           {copied ? <Icon.Check className="h-3 w-3" /> : <Icon.Copy className="h-3 w-3" />}
           {copied ? "Copied" : "Copy"}
         </button>
       </div>
-      <pre className="overflow-x-auto py-1.5 font-mono text-[11px] leading-[1.55]">
+      <pre className="overflow-x-auto py-1.5 font-mono text-[12.5px] leading-[1.55]">
         {text.split("\n").map((line, i) => (
           <div key={i} className={`px-2.5 ${lineClass(lang, line)}`}>
             {line || " "}
@@ -211,7 +211,7 @@ export function CodeBlock({ lang, text }: { lang: string; text: string }) {
 export function Markdown({ text, resolve, onTarget }: { text: string } & Ctx) {
   const ctx = { resolve, onTarget };
   return (
-    <div className="space-y-2 text-[13px] leading-relaxed [overflow-wrap:anywhere]">
+    <div className="space-y-2.5 text-[15px] leading-[1.55] [overflow-wrap:anywhere]">
       {parseBlocks(text).map((b, i) => {
         switch (b.kind) {
           case "p":
@@ -222,7 +222,7 @@ export function Markdown({ text, resolve, onTarget }: { text: string } & Ctx) {
             );
           case "h":
             return (
-              <p key={i} className={`pt-1 font-semibold ${b.level <= 2 ? "text-[14px]" : "text-[13px]"}`}>
+              <p key={i} className={`font-letter pt-1 font-extrabold ${b.level <= 2 ? "text-[17px]" : "text-[15.5px]"}`}>
                 <Inline text={b.text} ctx={ctx} />
               </p>
             );
@@ -258,9 +258,9 @@ export function Markdown({ text, resolve, onTarget }: { text: string } & Ctx) {
           case "table":
             return (
               <div key={i} className="overflow-x-auto">
-                <table className="w-full text-[12px] tabular-nums">
+                <table className="w-full text-[13.5px] tabular-nums">
                   <thead>
-                    <tr className="text-left text-[11px] text-[var(--muted)]">
+                    <tr className="text-left text-[12.5px] text-[var(--muted)]">
                       {b.header.map((h, j) => (
                         <th key={j} className="border-b border-[var(--border)] py-1 pr-3 font-medium">
                           <Inline text={h} ctx={ctx} />
