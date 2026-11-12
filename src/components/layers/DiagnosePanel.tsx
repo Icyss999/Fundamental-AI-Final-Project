@@ -369,7 +369,6 @@ export function DiagnosePanel({
       ) : (
         <>
           <Note>
-            {layers.report ? `From ${layers.report.name}: ` : ""}
             {d.failing} failed, {d.passing} passed{d.tests.length - d.failing - d.passing > 0 ? `, ${d.tests.length - d.failing - d.passing} not known` : ""}.
           </Note>
           <ul className="mt-2.5 space-y-1">
@@ -396,7 +395,6 @@ export function DiagnosePanel({
             : ""}
           .{d.history.bulkSkipped > 0 && ` ${d.history.bulkSkipped} bulk ${d.history.bulkSkipped === 1 ? "change was" : "changes were"} skipped.`}
           {history.truncated && ` Only the latest ${history.read} were read.`}
-          {history.source === "fixture" && " This sample ships a recorded history."}
         </Note>
       ) : (
         <Note>No git history was available, so the starting guess follows file size only.</Note>

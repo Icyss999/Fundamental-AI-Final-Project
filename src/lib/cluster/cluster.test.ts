@@ -86,7 +86,7 @@ describe("searching for modules", () => {
   });
 
   it("on the sample, beats the folder grouping and names clusters after their folders", async () => {
-    const { graph: full } = await extractGraph(path.resolve(__dirname, "../../../samples/restaurant-app"));
+    const { graph: full } = await extractGraph(path.resolve(__dirname, "../../../fixtures/restaurant-app"));
     const a = analyzeProject(full, "restaurant-app", false);
     for (const algorithm of ["annealing", "hill-climbing"] as const) {
       const run = clusterProject(a.graph, a, { algorithm });

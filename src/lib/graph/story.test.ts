@@ -8,7 +8,7 @@ import { buildTour, mapRows, projectStory, type Sentence } from "./story";
 let a: ProjectAnalysis;
 let org: Organization;
 beforeAll(async () => {
-  const { graph } = await extractGraph(path.resolve(__dirname, "../../../samples/restaurant-app"));
+  const { graph } = await extractGraph(path.resolve(__dirname, "../../../fixtures/restaurant-app"));
   a = analyzeProject(graph, "restaurant-app", false);
   org = organize([...a.modules.keys()], a.moduleEdges);
 });

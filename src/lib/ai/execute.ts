@@ -10,7 +10,6 @@ import { describeStep, structureMetrics } from "@/lib/change/describe";
 import { formatFact, type Proof } from "@/lib/change/engine";
 import type { Heuristic } from "@/lib/change/planner";
 import type { Outcome } from "@/lib/diagnose/bayes";
-import { parseTestReport, reportFailures } from "@/lib/diagnose/reports";
 import type { Severity, Finding } from "@/lib/diagnose/review";
 import { degrees } from "@/lib/graph/analysis";
 import { moduleGraph } from "@/lib/graph/partition";
@@ -52,8 +51,6 @@ export const TOOL_LABELS: Record<string, string> = {
   show_in_diagram: "Updating the diagram",
   list_tests: "Listing tests",
   set_test_outcomes: "Recording test results",
-  load_example_report: "Loading the example test report",
-  get_test_failures: "Reading test failures",
   rank_suspects: "Ranking suspects (Bayes)",
   explain_suspect: "Explaining",
   get_rules: "Reading the rules",
@@ -166,15 +163,6 @@ function proofLines(p: Proof, depth = 0): string[] {
   return lines;
 }
 
-function failures(ws: AssistantWorkspace, limit: number) {
-  const report = ws.state.report;
-  if (!report) return [];
-  const ids = ws.state.diagnosis.tests.map((t) => t.id);
-  return reportFailures(report.text, ids)
-    .slice(0, limit)
-    .map((f) => ({ test: f.test, case: f.name, message: f.message.length > 600 ? `${f.message.slice(0, 600)}…` : f.message }));
-}
-
 function topSuspects(ws: AssistantWorkspace, n = 5): string[] {
   return ws.state.diagnosis.files.slice(0, n).map((f) => `${f.id} ${pct(f.posterior)}`);
 }
@@ -246,7 +234,6 @@ const HANDLERS: Record<string, Handler> = {
         god_files: a.godFiles.map((g) => ({ file: g.id, imported_by: g.fanIn, z_score: round(g.zScore) })),
         history: d.history ? { commits: d.history.commits, bug_fix_commits: d.history.fixCommits, from: d.history.from ? day(d.history.from) : null, to: d.history.to ? day(d.history.to) : null } : null,
         tests: { test_files: d.tests.length, failing: d.failing, passing: d.passing },
-        example_report: data.exampleReport?.name ?? null,
         rules: { active: policy.active, errors: policy.errors.length, violations: violations.length },
         plan: plan ? { status: plan.status, steps: plan.steps.length, cost: round(plan.cost), showing_step: step } : null,
         diagram_grouping: {
@@ -522,34 +509,6 @@ const HANDLERS: Record<string, Handler> = {
     };
   },
 
-  load_example_report(ws) {
-    const report = ws.state.data.exampleReport;
-    if (!report) throw new ToolError("This project ships no test report. Ask the user which tests fail, or for their test output.");
-    const parsed = parseTestReport(report.text, ws.state.diagnosis.tests.map((t) => t.id));
-    ws.setOutcomes(parsed.outcomes, report);
-    const failed = [...parsed.outcomes].filter(([, o]) => o === "fail").map(([t]) => t);
-    return {
-      summary: `Loaded ${report.name}: ${failed.length} failing of ${parsed.outcomes.size}`,
-      content: {
-        report: report.name,
-        format: parsed.format,
-        failing: failed,
-        passing: parsed.outcomes.size - failed.length,
-        unmatched: parsed.unmatched,
-        failure_messages: failures(ws, 5),
-        top_suspects: topSuspects(ws),
-      },
-    };
-  },
-
-  get_test_failures(ws, args) {
-    if (!ws.state.report) throw new ToolError("No test report has been loaded. Ask the user for the failure output (or to load a report in the Bug risk panel).");
-    const list = failures(ws, int(args, "limit", 20, 1, 100));
-    return {
-      summary: `${list.length} failing ${list.length === 1 ? "case" : "cases"} in ${ws.state.report.name}`,
-      content: { report: ws.state.report.name, failures: list },
-    };
-  },
 
   report_findings(ws, args) {
     const raw = args.findings;

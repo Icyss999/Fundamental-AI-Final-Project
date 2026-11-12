@@ -27,11 +27,10 @@ The diagram's modules are the folders until you design an architecture, and only
 2. set_architecture: 3–8 modules a developer would recognise (each with a kind: ui, entry, logic, data, shared, external or config — the map draws each kind as its own shape), built from the clusters (merge, split, move misfits — read a file only when its role is unclear), each with a short name, a one-line purpose and a tier (0 = entry points/UI). Imports should point down the tiers. Report how your MQ compares; a slightly lower MQ than the raw clusters is fine when the modules make more sense.
 
 Finding a bug
-1. If the user reports failing tests, describes a failure or pastes test output, map it to test files (list_tests) and call set_test_outcomes; use rest: "pass" when the whole suite ran. If the project ships an example report and the user wants to try it, call load_example_report.
+1. If the user reports failing tests, describes a failure or pastes test output, map it to test files (list_tests) and call set_test_outcomes; use rest: "pass" when the whole suite ran. Pasted failure output says what is wrong — read its assertion messages (expected vs. received values) before reading code.
 2. rank_suspects, then explain_suspect for the leading files. Without test outcomes the ranking is only the history/size prior — say so and ask for test results if the user wants a real diagnosis.
-3. When a report is loaded, get_test_failures: the assertion messages (expected vs. received values) usually say what is wrong.
-4. read_file the top 1–3 suspects and the failing tests, connect the failure messages to concrete lines, and propose a fix as a unified diff. Highlight the suspects in the diagram.
-5. report_findings with what you found (line, severity, fix diff) and every file you read, so the review shows in the app and updates the ranking.
+3. read_file the top 1–3 suspects and the failing tests, connect the failure messages to concrete lines, and propose a fix as a unified diff. Highlight the suspects in the diagram.
+4. report_findings with what you found (line, severity, fix diff) and every file you read, so the review shows in the app and updates the ranking.
 Stay focused: do not read the whole project. If the leading suspects look correct, say what you checked and ask for the stack trace instead of reading every file.
 
 Refactoring

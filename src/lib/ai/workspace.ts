@@ -32,8 +32,6 @@ export interface WorkspaceSnapshot {
   basis: DiagnosisBasis;
   diagnosis: Diagnosis;
   outcomes: ReadonlyMap<string, Outcome>;
-  /** The last test report loaded, if any. */
-  report: { name: string; text: string } | null;
   params: DiagnosisParams;
   /** The AI's code review, and whether it counts as evidence. */
   review: Review | null;
@@ -58,7 +56,6 @@ export interface WorkspaceSnapshot {
 /** How tools change what the user sees. */
 export interface WorkspaceEffects {
   setOutcomes(outcomes: ReadonlyMap<string, Outcome>): void;
-  loadReport(text: string, name: string): void;
   setRulesText(text: string): void;
   setPlanOptions(options: PlanSettings): void;
   adoptPlan(plan: PlanResult, rulesText: string): void;
@@ -104,15 +101,10 @@ export class AssistantWorkspace {
     this.s.diagnosis = scoreDiagnosis(this.s.basis, this.s.outcomes, this.s.params, review && useReview ? reviewEvidence(review) : null);
   }
 
-  setOutcomes(outcomes: ReadonlyMap<string, Outcome>, report?: { text: string; name: string }) {
+  setOutcomes(outcomes: ReadonlyMap<string, Outcome>) {
     this.s.outcomes = outcomes;
     this.rescore();
-    if (report) {
-      this.s.report = report;
-      this.effects.loadReport(report.text, report.name);
-    } else {
-      this.effects.setOutcomes(outcomes);
-    }
+    this.effects.setOutcomes(outcomes);
     this.setMode("risk");
   }
 

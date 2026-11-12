@@ -40,7 +40,8 @@ the map: `DESIGN.md` (read it before changing UI). **Every page is a route** (us
 only what the AI made** (user verdict; the manual controls were removed):
 
 - `/` — start page: paste a GitHub URL (or `owner/repo`, or `…/tree/<branch>/<folder>`), pick one of your repos
-  (optional **Sign in with GitHub**, private included) or an example → `/analyze?repo=…`.
+  (optional **Sign in with GitHub**, private included) or an example public repo → `/analyze?repo=…`. There is no
+  built-in sample (user verdict 2026-11-12, "we use real data"): every analysis is a real repository.
 - `/analyze?repo=…` — the **waiting screen**: the server shallow-clones and reads the code (streamed progress), then the
   AI's pass starts (1 `cluster_modules` → `set_architecture` with a `kind` per part; 2 review the riskiest files →
   `report_findings`; 3 rules → A* plan → `attach_patch` per step). It waits **only for stage 1** (user verdict), shown
@@ -90,13 +91,12 @@ Server (Node only):
   `/api/auth/callback/github`. `src/lib/auth/client.ts` is the React client (`signIn.social`, `useSession`,
   `signOut`); `src/lib/auth/config.ts` + `/api/github/status` tell the UI whether credentials are set.
 - `src/app/api/github/repos/route.ts` — the signed-in user's repositories for the picker.
-- `src/lib/analyze.ts` — the pipeline: GitHub URL → metadata → clone → extract → history → overview. `"sample"`
-  analyses `samples/restaurant-app` (history from its `git-log.txt`, plus `test-results.json` as `exampleReport`);
-  absolute local paths are allowed in development only (their own `git log` is read).
+- `src/lib/analyze.ts` — the pipeline: GitHub URL → metadata → clone → extract → history → overview. Absolute local
+  paths are allowed in development only (their own `git log` is read).
 - `src/app/api/assistant/route.ts` — GET `{configured, model}`; POST `{messages, context, effort, round}` → NDJSON
   `AssistantEvent`s (reasoning/text deltas, then one `done` with tool calls, or `error`). Adds the system prompt +
   tool specs; past `WRAP_UP_ROUND` tool rounds it appends a "answer now" system note. Per-IP rate limit (`limits.ts`).
-- `src/app/api/source/route.ts` — POST `{source, path}` → `{text}` for `read_file` (`src/lib/repo/source.ts`: sample /
+- `src/app/api/source/route.ts` — POST `{source, path}` → `{text}` for `read_file` (`src/lib/repo/source.ts`:
   dev-only local folders read with realpath containment; GitHub via `fetchRepoFile` at the analysed commit — API with a
   token, else raw.githubusercontent.com).
 - `src/lib/ai/deepseek.ts` — DeepSeek client (OpenAI format, `https://api.deepseek.com/chat/completions`): SSE parsing,
@@ -152,7 +152,7 @@ Shared / pure (unit-tested):
   simulated annealing with T0 from sampled worsening moves at p=0.8, geometric cooling, best-seen + HC polish; seeded
   mulberry32; candidate targets = neighbour clusters + one new cluster; `placeIsolated` puts import-less files with their
   folder-mates), `grouping.ts` (`clusterProject`, `partitionMQ`, `clusterLabels` from dominant folders,
-  `architectureGrouping` for the AI's modules: ids `ai-N`, labels, descriptions, tiers). Sample: MQ ≈ 2.20 vs folders 0.77.
+  `architectureGrouping` for the AI's modules: ids `ai-N`, labels, descriptions, tiers). Fixture: MQ ≈ 2.20 vs folders 0.77.
 - `src/lib/graph/view.ts` — (graph, partition, expanded modules) → visible boxes and merged edges (`members` = the
   file-level `importKey`s behind each edge, so overlays can colour merged edges). Imports between two modules are one
   module-level edge whether they are open or not; inside an opened module, file-to-file edges (those told by a detour,
@@ -174,15 +174,16 @@ Shared / pure (unit-tested):
   generation with signature-based symmetry pruning; binary heap; A* with re-opening; `edgesAfter`).
 - `src/lib/change/describe.ts` — plan text/metrics shared by the Refactor panel and the AI: `describeStep`, `pathAfter`,
   `structureMetrics`, `compareSearches`.
-- `src/lib/ai/` (client-safe except deepseek/limits) — `protocol.ts` (wire types, `parseChatRequest`), `specs.ts` (23 tool
+- `src/lib/ai/` (client-safe except deepseek/limits) — `protocol.ts` (wire types, `parseChatRequest`), `specs.ts` (20 tool
   schemas, incl. `cluster_modules` (never drawn), `set_architecture`, `report_findings`, `attach_patch`), `autopilot.ts`
   (the three stage prompts and round budgets), `workspace.ts` (`AssistantWorkspace`: snapshot of Layer 2/3 state that tools mutate *immediately* — React
   only catches up after a render, so `set_rules` then `plan_refactoring` in one turn must see the new rules — and
   pushes every change to the UI through `WorkspaceEffects`; `resolvePath` for paths as people write them),
   `execute.ts` (tool handlers → `{content, summary, ok}`; errors go back to the model, never thrown), `brief.ts`
   (project brief in the system prompt; `<app_state>` prefixed to each user message).
-- `src/lib/layers.test.ts` — both layers end to end on the sample (expected ranking and plan). `src/lib/ai/execute.test.ts`
-  — the tools on the sample (same ranking and plan through the AI path).
+- `src/lib/layers.test.ts` — both layers end to end on the fixture (expected ranking and plan). `src/lib/ai/execute.test.ts`
+  — the tools on the fixture (same ranking and plan through the AI path; the fixture's `test-results.json` is parsed
+  and passed on with `set_test_outcomes`, as the AI does with failures the user reports).
 
 Client:
 - Routes: `src/app/page.tsx` (`Landing`), `src/app/analyze/page.tsx` (`AnalyzeScreen`), `src/app/map/layout.tsx`
@@ -199,7 +200,7 @@ Client:
   `Landing` (+ `CoverMap`), `RepoForm`, `RepoPicker`, `AccountButton`, `useGitHubSession`, `stream.ts`, `ui.tsx`.
 - `src/components/layers/` — `useLayers` (Layer 2/3 state: outcomes, params, rules, plan, playback; a plan is tied to
   the rules *text* it was made for, so editing rules retires it; `adoptPlan`/`adoptComparison` take results computed by
-  the AI; `report` = last loaded test report, whose failure messages `get_test_failures` reads; `review` + `useReview`
+  the AI; `review` + `useReview`
   = the AI's findings and whether they count; `patches` per plan step, kept with the plan object), `DiagnosePanel`,
   `ChangePanel`, `format.ts`.
 - `src/components/assistant/` — `useAssistant` (the agent loop in the browser: stream a reply, run its tool calls in
@@ -236,7 +237,9 @@ Client:
   length + 60 per turn; searches within 160 px of the two ends first, then 480, then everywhere; gives up above 80
   boxes in the area), `edges.tsx` (draws the given route; smooth-step when there is none), `nodes.tsx`,
   `Inspector.tsx`, `panel.tsx` (shared sidebar pieces).
-- `samples/restaurant-app/` — own test project with planted smells: pages import `data/db.ts` directly although
+- `fixtures/restaurant-app/` — **test-only** fixture (the app never offers it; it was the built-in sample until
+  2026-11-12), kept because it is the only project with known planted bugs, which the tests and the Phase 5
+  evaluation check the algorithms against. Planted smells: pages import `data/db.ts` directly although
   `services/menuService.ts` wraps it (the planner's example goal), a `cartStore ↔ pricing` cycle, and god file
   `lib/utils.ts`. Co-located `*.test.ts(x)` give Layer 2 its coverage; `git-log.txt` is a recorded history
   (generated, `git log` format) with bug fixes concentrated in pricing/cartStore; `test-results.json` (Vitest JSON) is

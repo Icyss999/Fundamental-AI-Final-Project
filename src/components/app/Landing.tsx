@@ -7,7 +7,7 @@ import { fetchAssistantStatus } from "@/components/assistant/client";
 import { AccountButton } from "./AccountButton";
 import { RepoForm } from "./RepoForm";
 import { RepoPicker } from "./RepoPicker";
-import { analyzeHref, mapHref, SAMPLE_SOURCE } from "./routes";
+import { analyzeHref, mapHref } from "./routes";
 import { useOptionalProject, useRun } from "./session";
 import { Icon, Logo, Wordmark } from "./ui";
 
@@ -145,11 +145,6 @@ export function Landing() {
                         </button>
                       </li>
                     ))}
-                    <li>
-                      <button onClick={() => onAnalyze(SAMPLE_SOURCE)} className="k-btn k-btn-small !h-9 border-dashed" title="A small project with a few problems planted on purpose">
-                        The built-in sample
-                      </button>
-                    </li>
                   </ul>
                 </div>
                 {!github.user && github.status === "ready" && github.configured && (

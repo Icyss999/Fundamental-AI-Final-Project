@@ -6,8 +6,6 @@ import type { AnalysisResult } from "@/lib/analyze";
  * and one page per map mode, `/map/structure|bug-risk|refactor?repo=…`, which share the map layout.
  */
 
-export const SAMPLE_SOURCE = "sample";
-
 export const MODE_SLUG: Record<DiagramMode, string> = { structure: "structure", risk: "bug-risk", refactor: "refactor" };
 
 export function mapHref(mode: DiagramMode, repo: string): string {
@@ -24,7 +22,7 @@ export function modeFromPath(pathname: string): DiagramMode {
   return "structure";
 }
 
-/** The short, shareable form of what was analysed: `owner/repo` (or the folder link), `sample`, or the local path. */
+/** The short, shareable form of what was analysed: `owner/repo` (or the folder link), or the local path. */
 export function canonicalSource(data: AnalysisResult, requested: string): string {
   const s = data.overview.source;
   if (s.kind === "github") return s.subdir ? `https://github.com/${s.owner}/${s.repo}/tree/${s.branch}/${s.subdir}` : `${s.owner}/${s.repo}`;
@@ -33,7 +31,6 @@ export function canonicalSource(data: AnalysisResult, requested: string): string
 
 /** A readable name for a repository before it has been read. */
 export function displayName(repo: string): string {
-  if (repo === SAMPLE_SOURCE) return "the sample project";
   const m = repo.match(/github\.com\/([^/\s]+\/[^/\s#?]+)/);
   return (m ? m[1] : repo).replace(/\.git$/, "");
 }

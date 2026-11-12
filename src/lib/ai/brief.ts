@@ -20,7 +20,7 @@ export function projectBrief(data: AnalysisResult, a: ProjectAnalysis): string {
   if (src.kind === "github") {
     lines.push(`Source: github.com/${src.owner}/${src.repo}${src.subdir ? ` (folder ${src.subdir})` : ""}, branch ${src.branch}, commit ${src.commit.slice(0, 7)}${src.private ? ", private" : ""}`);
   } else {
-    lines.push(`Source: ${src.path === "samples/restaurant-app" ? "the bundled sample project (samples/restaurant-app, with planted smells)" : `local folder ${src.path}`}`);
+    lines.push(`Source: local folder ${src.path}`);
   }
   if (o.readme?.summary) lines.push(`README: ${o.readme.title ? `${o.readme.title} — ` : ""}${o.readme.summary.slice(0, 400)}`);
   if (o.techStack.length) lines.push(`Stack: ${o.techStack.map((t) => t.name).join(", ")}`);
@@ -34,9 +34,9 @@ export function projectBrief(data: AnalysisResult, a: ProjectAnalysis): string {
   lines.push(`Source files: ${a.graph.nodes.length} (${a.totalLoc.toLocaleString("en")} lines) in ${a.modules.size} modules${hiddenText ? `; hidden in the diagram by default: ${hiddenText}` : ""}`);
   if (a.prefix) lines.push(`Shared folder prefix: "${a.prefix}" — rule paths and file names may leave it out.`);
   const h = data.history;
-  lines.push(h ? `Git history: ${h.commits.length} commits read${h.source === "fixture" ? " (recorded fixture)" : ""}${h.truncated ? ", older ones not read" : ""}.` : "Git history: unavailable — the bug-risk prior uses file size only.");
+  lines.push(h ? `Git history: ${h.commits.length} commits read${h.truncated ? ", older ones not read" : ""}.` : "Git history: unavailable — the bug-risk prior uses file size only.");
   const tests = data.graph.nodes.filter((n) => n.role === "test").length;
-  lines.push(`Test files: ${tests}${data.exampleReport ? `; an example test report (${data.exampleReport.name}) can be loaded with load_example_report` : ""}.`);
+  lines.push(`Test files: ${tests}.`);
 
   lines.push("", "## Modules (label: files, lines → modules it imports, with import counts)");
   const out = new Map<string, string[]>();

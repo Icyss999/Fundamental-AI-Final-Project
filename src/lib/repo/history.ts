@@ -41,11 +41,6 @@ async function shallowBoundary(dir: string): Promise<Set<string>> {
   }
 }
 
-/** History recorded in a text file in the `git log` format (used by the bundled sample project). */
-export async function readHistoryFixture(file: string): Promise<Commit[]> {
-  return parseGitLog(await readFile(/*turbopackIgnore: true*/ file, "utf8"));
-}
-
 /** Keeps only the project's files in each commit (remembering how many it touched) and drops commits left empty. */
 export function trimHistory(commits: readonly Commit[], files: ReadonlySet<string>): Commit[] {
   const result: Commit[] = [];

@@ -15,7 +15,7 @@ import { AssistantWorkspace, type WorkspaceEffects, type WorkspaceSnapshot } fro
 import type { AnalysisResult, AnalyzeStep } from "@/lib/analyze";
 import { partitionMQ, type ClusterRun, type Grouping, type GroupingKind } from "@/lib/cluster/grouping";
 import { analyzeProject, roleCounts } from "@/lib/graph/project-analysis";
-import { canonicalSource, mapHref, modeFromPath, SAMPLE_SOURCE } from "./routes";
+import { canonicalSource, mapHref, modeFromPath } from "./routes";
 import { streamAnalysis } from "./stream";
 import { useGitHubSession } from "./useGitHubSession";
 
@@ -78,7 +78,7 @@ export function SessionRoot({ children }: { children: ReactNode }) {
     const controller = new AbortController();
     abortRef.current = controller;
     const id = (current?.id ?? 0) + 1;
-    const fresh: Run = { repo, canonical: null, id, progress: { source: repo, current: repo === SAMPLE_SOURCE ? "extract" : "resolve", details: {} }, data: null, at: 0, error: null };
+    const fresh: Run = { repo, canonical: null, id, progress: { source: repo, current: "resolve", details: {} }, data: null, at: 0, error: null };
     runRef.current = fresh;
     setRun(fresh);
     const update = (change: (r: Run) => Run) =>
@@ -92,7 +92,7 @@ export function SessionRoot({ children }: { children: ReactNode }) {
         update((r) => ({ ...r, progress: r.progress && { ...r.progress, current: step, details: detail ? { ...r.progress.details, [step]: detail } : r.progress.details } })),
       );
       const canonical = canonicalSource(data, repo);
-      setInput(canonical === SAMPLE_SOURCE ? "" : canonical);
+      setInput(canonical);
       update((r) => ({ ...r, data, canonical, at: Date.now(), progress: null }));
     } catch (e) {
       if (!controller.signal.aborted) update((r) => ({ ...r, progress: null, error: e instanceof Error ? e.message : String(e) }));
@@ -205,7 +205,6 @@ function useProjectState(repo: string, data: AnalysisResult, analysedAt: number)
         basis: layers.basis,
         diagnosis: layers.diagnosis,
         outcomes: layers.outcomes,
-        report: layers.report,
         params: layers.params,
         review: layers.review,
         useReview: layers.useReview,
@@ -223,7 +222,6 @@ function useProjectState(repo: string, data: AnalysisResult, analysedAt: number)
       },
       effects: {
         setOutcomes: layers.setOutcomes,
-        loadReport: layers.loadReport,
         setRulesText: layers.setRulesText,
         setPlanOptions: layers.setPlanOptions,
         adoptPlan: layers.adoptPlan,

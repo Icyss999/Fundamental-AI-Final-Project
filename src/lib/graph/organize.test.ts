@@ -6,7 +6,7 @@ import { analyzeProject } from "./project-analysis";
 
 describe("organizing the map", () => {
   it("puts the sample's shared parts on shelves and its loop side by side", async () => {
-    const { graph } = await extractGraph(path.resolve(__dirname, "../../../samples/restaurant-app"));
+    const { graph } = await extractGraph(path.resolve(__dirname, "../../../fixtures/restaurant-app"));
     const a = analyzeProject(graph, "x", false);
     const label = (m: string) => a.labels[m];
     const org = organize([...a.modules.keys()], a.moduleEdges);

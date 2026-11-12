@@ -7,15 +7,18 @@ import { Policy, suggestRules } from "@/lib/change/rules";
 import { partitionMQ } from "@/lib/cluster/grouping";
 import { DEFAULT_DIAGNOSIS_PARAMS, prepareDiagnosis, scoreDiagnosis } from "@/lib/diagnose/diagnose";
 import { parseGitLog } from "@/lib/diagnose/history";
+import { parseTestReport } from "@/lib/diagnose/reports";
 import { extractGraph } from "@/lib/graph/extract";
 import { analyzeProject } from "@/lib/graph/project-analysis";
 import { appState, projectBrief } from "./brief";
 import { executeTool } from "./execute";
 import { AssistantWorkspace, resolvePath, ToolError, type WorkspaceEffects, type WorkspaceSnapshot } from "./workspace";
 
-/** The assistant's tools on samples/restaurant-app, with the UI replaced by a call log. */
-const sample = path.resolve(__dirname, "../../../samples/restaurant-app");
+/** The assistant's tools on fixtures/restaurant-app, with the UI replaced by a call log. */
+const sample = path.resolve(__dirname, "../../../fixtures/restaurant-app");
 let snapshot: WorkspaceSnapshot;
+/** The fixture's recorded test run (test-results.json), as the AI would pass it on with set_test_outcomes. */
+let reported: { failing: string[]; passing: string[] };
 
 beforeAll(async () => {
   const { graph } = await extractGraph(sample);
@@ -30,18 +33,19 @@ beforeAll(async () => {
   const policy = new Policy(rules, analysis.prefix);
   const data: AnalysisResult = {
     graph,
-    history: { commits, source: "fixture", read: commits.length, truncated: false },
+    history: { commits, read: commits.length, truncated: false },
     warnings: [],
-    overview: { name: "restaurant-app", source: { kind: "local", path: "samples/restaurant-app" }, description: null, readme: null, github: null, packageInfo: null, techStack: [], languages: [] },
-    exampleReport: { name: "test-results.json", text: readFileSync(path.join(sample, "test-results.json"), "utf8") },
+    overview: { name: "restaurant-app", source: { kind: "local", path: sample }, description: null, readme: null, github: null, packageInfo: null, techStack: [], languages: [] },
   };
+  const run = parseTestReport(readFileSync(path.join(sample, "test-results.json"), "utf8"), basis.coverage.map((c) => c.id));
+  const outcomes = [...run.outcomes];
+  reported = { failing: outcomes.filter(([, o]) => o === "fail").map(([t]) => t), passing: outcomes.filter(([, o]) => o === "pass").map(([t]) => t) };
   snapshot = {
     data,
     analysis,
     basis,
     diagnosis: scoreDiagnosis(basis, new Map(), DEFAULT_DIAGNOSIS_PARAMS),
     outcomes: new Map(),
-    report: null,
     params: DEFAULT_DIAGNOSIS_PARAMS,
     review: null,
     useReview: true,
@@ -66,7 +70,6 @@ function session() {
   const calls: unknown[][] = [];
   const effects: WorkspaceEffects = {
     setOutcomes: (o) => calls.push(["setOutcomes", o.size]),
-    loadReport: (_text, name) => calls.push(["loadReport", name]),
     setRulesText: (text) => calls.push(["setRulesText", text]),
     setPlanOptions: (o) => calls.push(["setPlanOptions", o]),
     adoptPlan: (plan, rules) => calls.push(["adoptPlan", plan.steps.length, rules]),
@@ -94,22 +97,18 @@ function session() {
 }
 
 describe("bug finding through the tools", () => {
-  it("loads the example report, ranks pricing.ts first, and explains why", async () => {
+  it("records the failing tests, ranks pricing.ts first, and explains why", async () => {
     const { run, calls } = session();
-    const loaded = await run("load_example_report");
-    expect(loaded.ok).toBe(true);
-    expect(loaded.json.failing).toHaveLength(3);
-    expect(calls).toContainEqual(["loadReport", "test-results.json"]);
+    const recorded = await run("set_test_outcomes", reported);
+    expect(recorded.ok).toBe(true);
+    expect(recorded.json).toMatchObject({ failing: 3, passing: 5 });
+    expect(calls).toContainEqual(["setOutcomes", 8]);
     expect(calls).toContainEqual(["show", { mode: "risk" }]);
 
     const ranked = await run("rank_suspects", { limit: 3 });
     const suspects = ranked.json.suspects as { file: string; ochiai_rank: number }[];
     expect(suspects[0]).toMatchObject({ file: "src/services/pricing.ts", ochiai_rank: 2 });
     expect(ranked.summary).toMatch(/^#1 pricing\.ts/);
-
-    const failures = (await run("get_test_failures")).json.failures as { test: string; message: string }[];
-    expect(failures).toHaveLength(3);
-    expect(failures[0]).toMatchObject({ test: "src/services/pricing.test.ts", message: "AssertionError: expected 10.26 to be 9.5" });
 
     const why = await run("explain_suspect", { path: "pricing.ts" });
     expect(why.json.file).toBe("src/services/pricing.ts");
@@ -154,7 +153,7 @@ describe("refactoring through the tools", () => {
 
   it("plans with the rules set earlier in the same turn, then steps and compares", async () => {
     const { run, calls } = session();
-    await run("load_example_report");
+    await run("set_test_outcomes", reported);
     const rules = "forbid: pages -> data\n";
     await run("set_rules", { rules });
     const plan = await run("plan_refactoring");
@@ -176,9 +175,9 @@ describe("refactoring through the tools", () => {
     expect(rows[0].cost).toBeCloseTo(rows[2].cost, 6);
   });
 
-  it("reproduces the sample's plan for the suggested rules", async () => {
+  it("reproduces the fixture's plan for the suggested rules", async () => {
     const { run } = session();
-    await run("load_example_report");
+    await run("set_test_outcomes", reported);
     const plan = await run("plan_refactoring");
     const steps = plan.json.steps as { action: string; file: string; to: string }[];
     expect(steps.map((s) => `${s.action} ${s.file} ${s.to}`).sort()).toEqual([
@@ -276,7 +275,6 @@ describe("structure and diagram tools", () => {
     expect((await run("no_such_tool")).ok).toBe(false);
     expect((await run("get_file", { path: "nothing-here.ts" })).json.error).toMatch(/No file matches/);
     expect((await run("show_plan_step")).json.error).toMatch(/No plan is loaded/);
-    expect((await run("get_test_failures")).json.error).toMatch(/No test report/);
     const ws = session().ws;
     expect((await executeTool(ws, "get_file", "{not json")).summary).toMatch(/not valid JSON/);
   });
@@ -294,7 +292,7 @@ describe("structure and diagram tools", () => {
     const brief = projectBrief(snapshot.data, snapshot.analysis);
     expect(brief).toContain('Shared folder prefix: "src"');
     expect(brief).toContain("src/services/pricing.ts · ");
-    expect(brief).toMatch(/example test report \(test-results\.json\)/);
+    expect(brief).toContain("Test files: 8.");
     const state = appState(snapshot, 0);
     expect(state).toMatch(/^<app_state>\nMode: Structure \(Layer 1\)\n/);
     expect(state).toContain("(the folder-name suggestion), 5 violations");

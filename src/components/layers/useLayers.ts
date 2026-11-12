@@ -7,15 +7,9 @@ import { planRefactoring, type Heuristic, type PlanResult, type PlanStep } from 
 import { Policy, suggestRules } from "@/lib/change/rules";
 import type { Outcome } from "@/lib/diagnose/bayes";
 import { DEFAULT_DIAGNOSIS_PARAMS, prepareDiagnosis, scoreDiagnosis, type DiagnosisParams } from "@/lib/diagnose/diagnose";
-import { parseTestReport, ReportError } from "@/lib/diagnose/reports";
 import { reviewEvidence, type Review } from "@/lib/diagnose/review";
 import type { ProjectAnalysis } from "@/lib/graph/project-analysis";
 import { importKey } from "@/lib/graph/types";
-
-export interface ReportNote {
-  tone: "ok" | "error";
-  text: string;
-}
 
 export type Comparison = SearchComparison;
 
@@ -32,9 +26,6 @@ export function useLayers(data: AnalysisResult, analysis: ProjectAnalysis) {
   // ---- Layer 2 · Diagnose
   const [outcomes, setOutcomes] = useState<ReadonlyMap<string, Outcome>>(new Map());
   const [params, setParams] = useState<DiagnosisParams>(DEFAULT_DIAGNOSIS_PARAMS);
-  const [reportNote, setReportNote] = useState<ReportNote | null>(null);
-  /** The last report loaded (its failure messages are evidence the assistant can read). */
-  const [report, setReport] = useState<{ name: string; text: string } | null>(null);
   const { halfLifeDays, maxFilesPerCommit, coverageDecay } = params;
   const basis = useMemo(
     () => prepareDiagnosis(data.graph, analysis.graph.nodes, data.history?.commits ?? null, { halfLifeDays, maxFilesPerCommit, coverageDecay }),
@@ -45,7 +36,6 @@ export function useLayers(data: AnalysisResult, analysis: ProjectAnalysis) {
   const [useReview, setUseReview] = useState(true);
   const evidence = useMemo(() => (review && useReview ? reviewEvidence(review) : null), [review, useReview]);
   const diagnosis = useMemo(() => scoreDiagnosis(basis, outcomes, params, evidence), [basis, outcomes, params, evidence]);
-  const testIds = useMemo(() => basis.coverage.map((c) => c.id), [basis]);
 
   const setOutcome = (test: string, outcome: Outcome | null) =>
     setOutcomes((prev) => {
@@ -54,19 +44,6 @@ export function useLayers(data: AnalysisResult, analysis: ProjectAnalysis) {
       else next.delete(test);
       return next;
     });
-
-  const loadReport = (text: string, name: string) => {
-    try {
-      const parsed = parseTestReport(text, testIds);
-      setOutcomes(parsed.outcomes);
-      setReport({ name, text });
-      const failed = [...parsed.outcomes.values()].filter((o) => o === "fail").length;
-      const extra = parsed.unmatched.length > 0 ? ` ${parsed.unmatched.length} entries matched no test file here.` : "";
-      setReportNote({ tone: "ok", text: `${name}: ${parsed.outcomes.size} test files (${failed} failing), read as ${parsed.format}.${extra}` });
-    } catch (e) {
-      setReportNote({ tone: "error", text: e instanceof ReportError ? e.message : `Could not read ${name}.` });
-    }
-  };
 
   // ---- Layer 3 · Change
   const files = useMemo(() => analysis.graph.nodes.map((n) => ({ id: n.id, dir: n.dir, name: n.name, path: n.id })), [analysis]);
@@ -163,9 +140,6 @@ export function useLayers(data: AnalysisResult, analysis: ProjectAnalysis) {
     setOutcomes,
     params,
     setParams,
-    loadReport,
-    reportNote,
-    report,
     review,
     setReview,
     useReview,

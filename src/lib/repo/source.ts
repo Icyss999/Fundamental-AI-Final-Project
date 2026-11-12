@@ -6,7 +6,6 @@ import type { ProjectSource } from "./overview";
 /** Largest file the assistant may read. */
 export const MAX_SOURCE_BYTES = 400_000;
 
-const SAMPLE_LABEL = "samples/restaurant-app";
 const SHA = /^[0-9a-f]{40}$/;
 
 /** A relative POSIX path with no way out of its folder, or null. */
@@ -20,8 +19,8 @@ export function safeRelativePath(input: unknown): string | null {
 
 /**
  * Reads a project file for the assistant. `file` is relative to the analysed folder, as file ids are.
- * GitHub projects are read at the analysed commit; the sample and (in development) local folders
- * from disk, never outside the project folder.
+ * GitHub projects are read at the analysed commit; (in development) local folders from disk, never
+ * outside the project folder.
  */
 export async function readProjectFile(source: unknown, file: unknown, token?: string): Promise<string> {
   const rel = safeRelativePath(file);
@@ -38,11 +37,8 @@ export async function readProjectFile(source: unknown, file: unknown, token?: st
   }
 
   if (s.kind === "local" && typeof s.path === "string") {
-    let root: string;
-    if (s.path === SAMPLE_LABEL) root = path.join(process.cwd(), SAMPLE_LABEL);
-    else if (path.isAbsolute(s.path) && process.env.NODE_ENV !== "production") root = s.path;
-    else throw new RepoError("Local folders can only be read in development mode.");
-    return readInside(root, rel);
+    if (!path.isAbsolute(s.path) || process.env.NODE_ENV === "production") throw new RepoError("Local folders can only be read in development mode.");
+    return readInside(s.path, rel);
   }
   throw new RepoError("Unknown project source.");
 }

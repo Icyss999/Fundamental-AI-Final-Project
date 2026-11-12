@@ -6,7 +6,7 @@ import { useEffect } from "react";
 import { formatLoc } from "@/components/mapper/layout";
 import type { AnalyzeStep } from "@/lib/analyze";
 import { activity, AI_STEPS, aiState, lastError, StepPanel, useElapsed, type PanelState } from "./progress";
-import { displayName, mapHref, SAMPLE_SOURCE } from "./routes";
+import { displayName, mapHref } from "./routes";
 import { runIs, useOptionalProject, useRun, type Progress } from "./session";
 import { Icon, Logo, Wordmark } from "./ui";
 
@@ -54,7 +54,6 @@ export function AnalyzeScreen() {
   const failed = session?.stageOf("organize") === "failed";
   const working = !mine?.error && !failed && !noAI && !ready;
   const elapsed = useElapsed(working);
-  const readSteps = repo === SAMPLE_SOURCE ? READ_STEPS.slice(2) : READ_STEPS;
   const now = session ? activity(session.assistant.messages) : null;
   const sources = data ? data.graph.nodes.filter((f) => f.role === "source") : [];
 
@@ -120,16 +119,16 @@ export function AnalyzeScreen() {
 
             <section className="mt-8" aria-label="Progress">
               <h2 className="mb-2 text-[14px] font-bold text-[var(--muted)]">Reading the code</h2>
-              <ol className="grid gap-2" style={{ gridTemplateColumns: `repeat(${readSteps.length}, minmax(0, 1fr))` }}>
-                {readSteps.map((s, i) => (
-                  <StepPanel key={s.id} n={i + 1} label={s.label} state={readState(mine?.progress ?? null, !!data, readSteps, i)} />
+              <ol className="grid gap-2" style={{ gridTemplateColumns: `repeat(${READ_STEPS.length}, minmax(0, 1fr))` }}>
+                {READ_STEPS.map((s, i) => (
+                  <StepPanel key={s.id} n={i + 1} label={s.label} state={readState(mine?.progress ?? null, !!data, READ_STEPS, i)} />
                 ))}
               </ol>
               {!noAI && (
                 <>
                   <h2 className="mb-2 mt-5 text-[14px] font-bold text-[var(--muted)]">The AI at work</h2>
-                  <ol className="grid gap-2" style={{ gridTemplateColumns: `repeat(${readSteps.length}, minmax(0, 1fr))` }}>
-                    <StepPanel n={readSteps.length + 1} label={AI_STEPS.organize} state={aiState(stages?.organize)} />
+                  <ol className="grid gap-2" style={{ gridTemplateColumns: `repeat(${READ_STEPS.length}, minmax(0, 1fr))` }}>
+                    <StepPanel n={READ_STEPS.length + 1} label={AI_STEPS.organize} state={aiState(stages?.organize)} />
                   </ol>
                 </>
               )}

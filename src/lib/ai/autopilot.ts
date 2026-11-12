@@ -27,7 +27,7 @@ Then reply in one sentence: how the codebase is organised.`,
     title: "Find bugs",
     rounds: 14,
     prompt: `Autopilot, stage 2 of 3 — find bugs.
-If test outcomes or a report are loaded, use them (get_test_failures); if the project ships an example report, load it. Run rank_suspects, then read the 3–5 riskiest source files and the tests that reach them. Call report_findings with the concrete problems you found (file, line, severity, what is wrong and why, and a fix as a unified diff when you can) and list every file you read in reviewed. Report real problems only — an empty list is a valid review. Highlight the files with findings in the diagram.
+If test outcomes are recorded, they already count. Run rank_suspects, then read the 3–5 riskiest source files and the tests that reach them. Call report_findings with the concrete problems you found (file, line, severity, what is wrong and why, and a fix as a unified diff when you can) and list every file you read in reviewed. Report real problems only — an empty list is a valid review. Highlight the files with findings in the diagram.
 Then reply with a few bullets: the findings and how the ranking moved.`,
   },
   {

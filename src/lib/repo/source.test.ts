@@ -1,8 +1,10 @@
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { RepoError } from "./github";
 import { readProjectFile, safeRelativePath } from "./source";
 
-const sample = { kind: "local", path: "samples/restaurant-app" } as const;
+/** A local folder (allowed outside production): the test fixture. */
+const local = { kind: "local", path: path.resolve(__dirname, "../../../fixtures/restaurant-app") } as const;
 
 describe("reading project files for the assistant", () => {
   it("accepts only relative paths that stay inside the project", () => {
@@ -10,14 +12,14 @@ describe("reading project files for the assistant", () => {
     for (const bad of ["", "../x", "a/../b", "/etc/passwd", "a\\b", "a//b", "./a", "C:/x", "a\0b", 42]) expect(safeRelativePath(bad)).toBeNull();
   });
 
-  it("reads the sample from disk", async () => {
-    expect(await readProjectFile(sample, "src/services/pricing.ts")).toMatch(/export/);
+  it("reads a local folder from disk", async () => {
+    expect(await readProjectFile(local, "src/services/pricing.ts")).toMatch(/export/);
   });
 
   it("refuses to leave the project folder or read what is not a file", async () => {
-    await expect(readProjectFile(sample, "../../package.json")).rejects.toThrow(RepoError);
-    await expect(readProjectFile(sample, "src")).rejects.toThrow(/not a file/);
-    await expect(readProjectFile(sample, "src/missing.ts")).rejects.toThrow(/not found/);
+    await expect(readProjectFile(local, "../../package.json")).rejects.toThrow(RepoError);
+    await expect(readProjectFile(local, "src")).rejects.toThrow(/not a file/);
+    await expect(readProjectFile(local, "src/missing.ts")).rejects.toThrow(/not found/);
   });
 
   it("validates GitHub sources before any request", async () => {

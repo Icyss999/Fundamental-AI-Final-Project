@@ -9,8 +9,8 @@ import { parseTestReport } from "@/lib/diagnose/reports";
 import { extractGraph } from "@/lib/graph/extract";
 import { analyzeProject, type ProjectAnalysis } from "@/lib/graph/project-analysis";
 
-/** Layers 2 and 3 end to end on samples/restaurant-app (its git history and test report are fixtures). */
-const sample = path.resolve(__dirname, "../../samples/restaurant-app");
+/** Layers 2 and 3 end to end on fixtures/restaurant-app (its git history and test report are fixtures). */
+const sample = path.resolve(__dirname, "../../fixtures/restaurant-app");
 let analysis: ProjectAnalysis;
 let basis: DiagnosisBasis;
 let report: ReturnType<typeof parseTestReport>;

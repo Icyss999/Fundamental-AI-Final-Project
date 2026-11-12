@@ -13,7 +13,7 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     // Analysed by the app, not part of it.
-    "samples/**",
+    "fixtures/**",
   ]),
 ]);
 

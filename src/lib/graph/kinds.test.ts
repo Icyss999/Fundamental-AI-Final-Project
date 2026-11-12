@@ -31,7 +31,7 @@ describe("what kind of part a module is", () => {
 describe("kinds on the sample", () => {
   let a: ProjectAnalysis;
   beforeAll(async () => {
-    const { graph } = await extractGraph(path.resolve(__dirname, "../../../samples/restaurant-app"));
+    const { graph } = await extractGraph(path.resolve(__dirname, "../../../fixtures/restaurant-app"));
     a = analyzeProject(graph, "restaurant-app", false);
   });
 

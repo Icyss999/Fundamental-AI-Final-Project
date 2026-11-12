@@ -76,8 +76,8 @@ describe("partition helpers", () => {
   });
 });
 
-describe("extractGraph on samples/restaurant-app", () => {
-  const sample = path.resolve(__dirname, "../../../samples/restaurant-app");
+describe("extractGraph on fixtures/restaurant-app", () => {
+  const sample = path.resolve(__dirname, "../../../fixtures/restaurant-app");
 
   it("resolves tsconfig path aliases and finds the planted smells", async () => {
     const { graph: full, warnings } = await extractGraph(sample);

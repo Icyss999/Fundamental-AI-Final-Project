@@ -109,12 +109,6 @@ export const TOOL_SPECS: ToolSpec[] = [
       rest: { type: "string", enum: ["keep", "pass", "unknown"], description: "What happens to every other test file. Default keep." },
     },
   ),
-  tool("load_example_report", "Loads the test report bundled with the project (only the sample has one) as the test outcomes."),
-  tool(
-    "get_test_failures",
-    "Failure messages from the loaded test report (the bundled one, or one the user loaded in the Bug risk panel), per failing test case. Assertion messages usually say what is wrong — read them before reading code.",
-    { limit: int("Default 20.") },
-  ),
   tool(
     "report_findings",
     "Records your code review: concrete problems you found (file, line, severity, what is wrong and why, and a fix as a unified diff when you can), plus every file you read. Findings appear as badges in the diagram and in the Bug risk panel, and count as Bayesian evidence: flagged files gain probability, files you read and found clean lose some. Replaces the previous review unless append is true. Report only real problems; an empty list with the files you read is a valid review.",
